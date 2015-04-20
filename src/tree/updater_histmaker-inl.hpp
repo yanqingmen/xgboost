@@ -125,13 +125,18 @@ class HistMaker: public BaseMaker {
                       IFMatrix *p_fmat,
                       const BoosterInfo &info,
                       RegTree *p_tree) {
+    std::vector<std::pair<std::string, double> > stage;
+    stage.push_back(std::make_pair("init", rabit::utils::GetTime()));
     this->InitData(gpair, *p_fmat, info.root_index, *p_tree);
     this->InitWorkSet(p_fmat, *p_tree, &fwork_set);
     for (int depth = 0; depth < param.max_depth; ++depth) {
+      stage.push_back(std::make_pair("reset", rabit::utils::GetTime()));
       // reset and propose candidate split
       this->ResetPosAndPropose(gpair, p_fmat, info, fwork_set, *p_tree);
+      stage.push_back(std::make_pair("chist", rabit::utils::GetTime()));
       // create histogram
       this->CreateHist(gpair, p_fmat, info, fwork_set, *p_tree);
+      stage.push_back(std::make_pair("fsplit", rabit::utils::GetTime()));
       // find split based on histogram statistics
       this->FindSplit(depth, gpair, p_fmat, info, fwork_set, p_tree);
       // reset position after split
@@ -140,9 +145,18 @@ class HistMaker: public BaseMaker {
       // if nothing left to be expand, break
       if (qexpand.size() == 0) break;
     }
+    stage.push_back(std::make_pair("end", rabit::utils::GetTime()));
     for (size_t i = 0; i < qexpand.size(); ++i) {
       const int nid = qexpand[i];
       (*p_tree)[nid].set_leaf(p_tree->stat(nid).base_weight * param.learning_rate);
+    }
+    if (rabit::GetRank() == 0) {
+      std::ostringstream os;
+      for (size_t i = 1; i < stage.size(); ++i) {
+	os <<' ' << stage[i-1].first << ':' << stage[i].second - stage[i-1].second;
+      }
+      os << '\n';
+      rabit::TrackerPrint(os.str());
     }
   }
   // this function does two jobs

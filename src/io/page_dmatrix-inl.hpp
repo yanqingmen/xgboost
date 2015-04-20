@@ -171,9 +171,11 @@ class DMatrixPageBase : public DataMatrix {
         page.Clear();
         double tdiff = rabit::utils::GetTime() - tstart;
         if (!silent) {
-          utils::Printf("Writting to %s in %g MB/s, %lu MB written\n",
-                        cache_file, (bytes_write >> 20UL) / tdiff,
-                        (bytes_write >> 20UL));
+	  if (rabit::GetRank() == 0) {
+	    rabit::TrackerPrintf("Writting to %s in %g MB/s, %lu MB written\n",
+				 cache_file, (bytes_write >> 20UL) / tdiff,
+				 (bytes_write >> 20UL));
+	  }
         }
       }
       info.info.num_row += batch.label.size();

@@ -181,10 +181,18 @@ class BoostLearnTask {
 
     bool allow_lazy = learner.AllowLazyCheckPoint();
     for (int i = version / 2; i < num_round; ++i) {
-      elapsed = (unsigned long)(time(NULL) - start);
       if (version % 2 == 0) { 
-        if (!silent) printf("boosting round %d, %lu sec elapsed\n", i, elapsed);
+        if (!silent) {
+	  if (rabit::GetRank() == 0) {
+	    elapsed = (unsigned long)(time(NULL) - start);
+	    rabit::TrackerPrintf("boosting round %d, %lu sec elapsed\n", i, elapsed);
+	  }
+	}
         learner.UpdateOneIter(i, *data);
+	if (rabit::GetRank() == 0) {
+	  elapsed = (unsigned long)(time(NULL) - start);
+	  rabit::TrackerPrintf("Finish round %d, %lu sec elapsed\n", i, elapsed);
+	}
         if (allow_lazy) {
           rabit::LazyCheckPoint(&learner);
         } else {

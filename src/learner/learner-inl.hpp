@@ -37,6 +37,7 @@ class BoostLearner : public rabit::Serializable {
     seed_per_iteration = 0;
     seed = 0;
     save_base64 = 0;
+    tcost_predict = tcost_grad = tcost_boost;
   }
   virtual ~BoostLearner(void) {
     if (obj_ != NULL) delete obj_;
@@ -275,9 +276,20 @@ class BoostLearner : public rabit::Serializable {
     if (seed_per_iteration != 0 || rabit::IsDistributed()) {
       random::Seed(this->seed * kRandSeedMagic + iter);
     }
+    double tstart = rabit::utils::GetTime();
     this->PredictRaw(train, &preds_);
+    double tgrad = rabit::utils::GetTime();
     obj_->GetGradient(preds_, train.info, iter, &gpair_);
+    double tbst = rabit::utils::GetTime();    
     gbm_->DoBoost(train.fmat(), this->FindBufferOffset(train), train.info.info, &gpair_);
+    double tend = rabit::utils::GetTime();
+    tcost_predict += tgrad - tstart;
+    tcost_grad += tbst - tgrad;
+    tcost_boost += tend - tbst;
+    if (rabit::GetRank() == 0) {
+      rabit::TrackerPrintf("tcost_predict=%g sec, grad=%g sec, boost = %g sec\n",
+			   tcost_predict, tcost_grad, tcost_boost);
+    }
   }
   /*!
    * \brief whether model allow lazy checkpoint
@@ -487,7 +499,9 @@ class BoostLearner : public rabit::Serializable {
   std::vector<float> preds_;
   // gradient pairs
   std::vector<bst_gpair> gpair_;
-
+  // timer
+  double tcost_predict, tcost_grad, tcost_boost;
+  
  protected:
   // magic number to transform random seed
   const static int kRandSeedMagic = 127;
