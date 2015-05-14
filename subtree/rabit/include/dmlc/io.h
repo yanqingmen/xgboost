@@ -12,6 +12,13 @@
 #include <ostream>
 #include <streambuf>
 
+// include uint64_t only to make io standalone
+#ifdef _MSC_VER
+typedef unsigned __int64 uint64_t;
+#else
+#include <inttypes.h>
+#endif
+
 /*! \brief namespace for dmlc */
 namespace dmlc {
 /*!
@@ -36,13 +43,17 @@ class Stream {
   virtual ~Stream(void) {}
   /*!
    * \brief generic factory function
-   *    create an stream, the stream will close the underlying files
-   *    upon deletion
+   *  create an stream, the stream will close the underlying files upon deletion
+   *
    * \param uri the uri of the input currently we support
    *            hdfs://, s3://, and file:// by default file:// will be used
    * \param flag can be "w", "r", "a"
+   * \param allow_null whether NULL can be returned, or directly report error
+   * \return the created stream, can be NULL when allow_null == true and file do not exist
    */
-  static Stream *Create(const char *uri, const char* const flag);
+  static Stream *Create(const char *uri,
+                        const char* const flag,
+                        bool allow_null = false);
   // helper functions to write/read different data structures
   /*!
    * \brief writes a vector
@@ -79,8 +90,18 @@ class SeekStream: public Stream {
   virtual void Seek(size_t pos) = 0;
   /*! \brief tell the position of the stream */
   virtual size_t Tell(void) = 0;
-  /*! \return whether we are at end of file */
-  virtual bool AtEnd(void) const = 0;  
+  /*!
+   * \brief generic factory function
+   *  create an SeekStream for read only,
+   *  the stream will close the underlying files upon deletion
+   *  error will be reported and the system will exit when create failed 
+   * \param uri the uri of the input currently we support
+   *            hdfs://, s3://, and file:// by default file:// will be used
+   * \param allow_null whether NULL can be returned, or directly report error
+   * \return the created stream, can be NULL when allow_null == true and file do not exist
+   */
+  static SeekStream *CreateForRead(const char *uri,
+                                   bool allow_null = false);
 };
 
 /*! \brief interface for serializable objects */
@@ -115,9 +136,24 @@ class InputSplit {
     size_t size;
   };
   /*!
+   * \brief hint the inputsplit how large the chunk size
+   *  it should return when implementing NextChunk
+   *  this is a hint so may not be enforced,
+   *  but InputSplit will try adjust its internal buffer
+   *  size to the hinted value
+   * \param chunk_size the chunk size 
+   */
+  virtual void HintChunkSize(size_t chunk_size) {}
+  /*! \brief reset the position of InputSplit to beginning */
+  virtual void BeforeFirst(void) = 0;
+  /*!
    * \brief get the next record, the returning value
    *   is valid until next call to NextRecord or NextChunk
    *   caller can modify the memory content of out_rec
+   *   
+   *   For text, out_rec contains a single line
+   *   For recordio, out_rec contains one record content(with header striped)
+   *
    * \param out_rec used to store the result
    * \return true if we can successfully get next record
    *     false if we reached end of split
@@ -128,7 +164,7 @@ class InputSplit {
    * \brief get a chunk of memory that can contain multiple records, 
    *  the caller needs to parse the content of the resulting chunk,
    *  for text file, out_chunk can contain data of multiple lines
-   *  for recordio, out_chunk can contain data of multiple records
+   *  for recordio, out_chunk can contain multiple records(including headers)
    *   
    *  This function ensures there won't be partial record in the chunk
    *  caller can modify the memory content of out_chunk,
@@ -141,6 +177,7 @@ class InputSplit {
    * \return true if we can successfully get next record
    *     false if we reached end of split
    * \sa InputSplit::Create for definition of record
+   * \sa RecordIOChunkReader to parse recordio content from out_chunk
    */
   virtual bool NextChunk(Blob *out_chunk) = 0;
   /*! \brief destructor*/
@@ -300,35 +337,37 @@ class istream : public std::basic_istream<char> {
 // implementations of inline functions
 template<typename T>
 inline void Stream::Write(const std::vector<T> &vec) {
-  size_t sz = vec.size();
+  uint64_t sz = static_cast<uint64_t>(vec.size());
   this->Write(&sz, sizeof(sz));
   if (sz != 0) {
-    this->Write(&vec[0], sizeof(T) * sz);
+    this->Write(&vec[0], sizeof(T) * vec.size());
   }
 }
 template<typename T>
 inline bool Stream::Read(std::vector<T> *out_vec) {
-  size_t sz;
+  uint64_t sz;
   if (this->Read(&sz, sizeof(sz)) == 0) return false;
-  out_vec->resize(sz);
+  size_t size = static_cast<size_t>(sz);
+  out_vec->resize(size);
   if (sz != 0) {
-    if (this->Read(&(*out_vec)[0], sizeof(T) * sz) == 0) return false;
+    if (this->Read(&(*out_vec)[0], sizeof(T) * size) == 0) return false;
   }
   return true;
 }
 inline void Stream::Write(const std::string &str) {
-  size_t sz = str.length();
+  uint64_t sz = static_cast<uint64_t>(str.length());
   this->Write(&sz, sizeof(sz));
   if (sz != 0) {
-    this->Write(&str[0], sizeof(char) * sz);
+    this->Write(&str[0], sizeof(char) * str.length());
   }
 }
 inline bool Stream::Read(std::string *out_str) {
-  size_t sz;
+  uint64_t sz;
   if (this->Read(&sz, sizeof(sz)) == 0) return false;
-  out_str->resize(sz);
+  size_t size = static_cast<size_t>(sz);
+  out_str->resize(size);
   if (sz != 0) {
-    if (this->Read(&(*out_str)[0], sizeof(char) * sz) == 0) {
+    if (this->Read(&(*out_str)[0], sizeof(char) * size) == 0) {
       return false;
     }
   }

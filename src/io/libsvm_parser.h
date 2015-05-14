@@ -47,7 +47,7 @@ class LibSVMPageFactory  {
     int maxthread;
     #pragma omp parallel
     {
-      maxthread = omp_get_num_threads();
+      maxthread = omp_get_num_procs();
     }
     maxthread = std::max(maxthread / 2, 1);
     nthread_ = std::min(maxthread, nthread);
@@ -111,7 +111,8 @@ class LibSVMPageFactory  {
    */
   inline void ParseBlock(char *begin,
                          char *end,
-                         LibSVMPage *out) {    
+                         LibSVMPage *out) {
+    using namespace std;
     out->Clear();
     char *p = begin;
     while (p != end) {

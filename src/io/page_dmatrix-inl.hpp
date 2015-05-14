@@ -20,7 +20,7 @@ namespace io {
 class ThreadRowPageIterator: public utils::IIterator<RowBatch> {
  public:
   ThreadRowPageIterator(void) {
-    itr.SetParam("buffer_size", "2");
+    itr.SetParam("buffer_size", "4");
     page_ = NULL;
     base_rowid_ = 0;
   }
@@ -109,7 +109,7 @@ class DMatrixPageBase : public DataMatrix {
     std::string fname = fname_;
     int tmagic;
     utils::Check(fi.Read(&tmagic, sizeof(tmagic)) != 0, "invalid input file format");
-    utils::Check(tmagic == magic, "invalid format,magic number mismatch");
+    this->CheckMagic(tmagic);
     this->info.LoadBinary(fi);
     // load in the row data file
     fname += ".row.blob";
@@ -187,8 +187,8 @@ class DMatrixPageBase : public DataMatrix {
     iter_->Load(utils::FileStream(utils::FopenCheck(fname_row.c_str(), "rb")));    
     // save data matrix
     utils::FileStream fs(utils::FopenCheck(cache_file, "wb"));
-    int magic = kMagic;
-    fs.Write(&magic, sizeof(magic));
+    int tmagic = kMagic;
+    fs.Write(&tmagic, sizeof(tmagic));
     this->info.SaveBinary(fs);
     fs.Close();
     if (!silent) {
@@ -205,6 +205,7 @@ class DMatrixPageBase : public DataMatrix {
 
  protected:
   virtual void set_cache_file(const std::string &cache_file)  = 0;
+  virtual void CheckMagic(int tmagic)  = 0;
   /*! \brief row iterator */
   ThreadRowPageIterator *iter_;
 };
@@ -223,6 +224,11 @@ class DMatrixPage : public DMatrixPageBase<0xffffab02> {
   virtual void set_cache_file(const std::string &cache_file) {
     fmat_->set_cache_file(cache_file);
   }
+  virtual void CheckMagic(int tmagic) {
+    utils::Check(tmagic == DMatrixPageBase<0xffffab02>::kMagic ||
+                 tmagic == DMatrixPageBase<0xffffab03>::kMagic,
+                 "invalid format,magic number mismatch");
+  }
   /*! \brief the real fmatrix */
   FMatrixPage *fmat_;
 };
@@ -240,7 +246,12 @@ class DMatrixHalfRAM : public DMatrixPageBase<0xffffab03> {
   virtual IFMatrix *fmat(void) const {
     return fmat_;
   }
-  virtual void set_cache_file(const std::string &cache_file) {
+  virtual void set_cache_file(const std::string &cache_file) {    
+  }
+  virtual void CheckMagic(int tmagic) {
+    utils::Check(tmagic == DMatrixPageBase<0xffffab02>::kMagic ||
+                 tmagic == DMatrixPageBase<0xffffab03>::kMagic,
+                 "invalid format,magic number mismatch");   
   }
   /*! \brief the real fmatrix */
   IFMatrix *fmat_;
