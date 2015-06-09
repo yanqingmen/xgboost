@@ -147,7 +147,7 @@ Booster booster = new Booster(param, "model.bin");
 ```
 
 ####Prediction
-after training and loading a model, you use it to predict other data, the predict results will be a two-dimension float array, the first dimension size is the number of instances (dtest.rowNum()), the sconde dimension size is the number of class_size(would be 1 for binaray classifier) ,for predict leaf, it would be class_size*round
+after training and loading a model, you use it to predict other data, the predict results will be a two-dimension float array (nsample, nclass) ,for predict leaf, it would be (nsample, nclass*ntrees)
 ```java
 DMatrix dtest = new DMatrix("test.svm.txt");
 //predict
