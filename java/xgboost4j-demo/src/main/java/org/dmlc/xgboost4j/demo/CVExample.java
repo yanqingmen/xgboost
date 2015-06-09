@@ -48,6 +48,6 @@ public class CVExample {
         //set additional eval_metrics
         String[] metrics = null;
         
-        String[] evalHist = Trainer.crossValiation(param, trainMat, round, nfold, metrics);
+        String[] evalHist = Trainer.crossValiation(param, trainMat, round, nfold, metrics, null, null);
     }
 }

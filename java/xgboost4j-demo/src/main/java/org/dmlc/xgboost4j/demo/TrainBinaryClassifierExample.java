@@ -15,6 +15,8 @@
  */
 package org.dmlc.xgboost4j.demo;
 
+import java.io.File;
+import java.util.Arrays;
 import org.dmlc.xgboost4j.Booster;
 import org.dmlc.xgboost4j.DMatrix;
 import org.dmlc.xgboost4j.util.Params;
@@ -26,7 +28,7 @@ import org.dmlc.xgboost4j.util.Trainer;
  */
 public class TrainBinaryClassifierExample {
     public static void main(String[] args) {
-    //load train mat (svmlight format)
+        //load train mat (svmlight format)
         DMatrix trainMat = new DMatrix("../../demo/data/agaricus.txt.train");
         //load valid mat (svmlight format)
         DMatrix validMat = new DMatrix("../../demo/data/agaricus.txt.test");
@@ -54,12 +56,8 @@ public class TrainBinaryClassifierExample {
         
         //train a booster
         System.out.println("begin to train the booster model");        
-        Booster booster = Trainer.train(param, trainMat, round, dmats, evalNames);
+        Booster booster = Trainer.train(param, trainMat, round, dmats, evalNames, null, null);
         
-        //save model to modelPath
-        String modelPath = "./data/xgb_model.bin";
-        booster.saveModel(modelPath);
-        
-        System.out.println("training complete!!!!!!!!!!!!");
+        System.out.println("complete!!!!!!!!!!!!");
     }
 }
