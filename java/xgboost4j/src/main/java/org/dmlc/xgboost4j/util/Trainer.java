@@ -22,8 +22,10 @@ import java.util.List;
 import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
+import org.dmlc.xgboost4j.IEvaluation;
 import org.dmlc.xgboost4j.Booster;
 import org.dmlc.xgboost4j.DMatrix;
+import org.dmlc.xgboost4j.IObjective;
 
 
 /**
@@ -40,10 +42,12 @@ public class Trainer {
      * @param round Number of boosting iterations.
      * @param evalMats Data to be evaluated (may include dtrain)
      * @param evalNames name of data (used for evaluation info)
+     * @param obj customized objective (set to null if not used)
+     * @param eval customized evaluation (set to null if not used)
      * @return trained booster
      */
     public static Booster train(Params params, DMatrix dtrain, int round,
-            DMatrix[] evalMats, String[] evalNames) {
+            DMatrix[] evalMats, String[] evalNames, IObjective obj, IEvaluation eval) {
         //collect all data matrixs
         DMatrix[] allMats;
         if(evalMats!=null && evalMats.length>0) {
@@ -63,18 +67,29 @@ public class Trainer {
         long[] dataArray = null;
         String[] names = null;
         
+        if(dataArray==null || names==null) {
+            //prepare data for evaluation
+            dataArray = TransferUtil.dMatrixs2handles(evalMats);
+            names = evalNames;
+        }
+        
         //begin to train
         for(int iter=0; iter<round; iter++) {
-            booster.update(dtrain, iter);
+            if(obj != null) {
+                booster.update(dtrain, iter, obj);
+            } else {
+                booster.update(dtrain, iter);
+            }
             
             //evaluation
             if(evalMats!=null && evalMats.length>0) {
-                if(dataArray==null || names==null) {
-                    //prepare data for evaluation
-                    dataArray = TransferUtil.dMatrixs2handles(evalMats);
-                    names = evalNames;
-                } 
-                String evalInfo = booster.evalSet(dataArray, names, iter);
+                String evalInfo;
+                if(eval != null) {
+                    evalInfo = booster.evalSet(evalMats, evalNames, iter, eval);
+                }
+                else {
+                    evalInfo = booster.evalSet(dataArray, names, iter);
+                }
                 logger.info(evalInfo);
             }
         }
@@ -88,19 +103,31 @@ public class Trainer {
      * @param round Number of boosting iterations.
      * @param nfold Number of folds in CV.
      * @param metrics Evaluation metrics to be watched in CV.
+     * @param obj customized objective (set to null if not used)
+     * @param eval customized evaluation (set to null if not used)
      * @return evaluation history
      */
-    public static String[] crossValiation(Params params, DMatrix data, int round, int nfold, String[] metrics) {
+    public static String[] crossValiation(Params params, DMatrix data, int round, int nfold, String[] metrics, IObjective obj, IEvaluation eval) {
         CVPack[] cvPacks = makeNFold(data, nfold, params, metrics);
         String[] evalHist = new String[round];
         String[] results = new String[cvPacks.length];
         for(int i=0; i<round; i++) {
             for(CVPack cvPack : cvPacks) {
-                cvPack.update(i);
+                if(obj != null) {
+                    cvPack.update(i, obj);
+                } 
+                else {
+                    cvPack.update(i);
+                }
             }
             
             for(int j=0; j<cvPacks.length; j++) {
-                results[j] = cvPacks[j].eval(i);
+                if(eval != null) {
+                    results[j] = cvPacks[j].eval(i, eval);
+                }
+                else {
+                    results[j] = cvPacks[j].eval(i);
+                }
             }
             
             evalHist[i] = aggCVResults(results);

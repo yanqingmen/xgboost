@@ -23,6 +23,7 @@ import java.io.IOException;
 import java.io.OutputStreamWriter;
 import java.io.UnsupportedEncodingException;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
@@ -121,6 +122,31 @@ public final class Booster {
     }
     
     /**
+     * update with customize obj func
+     * @param dtrain training data
+     * @param iter current iteration number
+     * @param obj customized objective class
+     */
+    public void update(DMatrix dtrain, int iter, IObjective obj) {
+        float[][] predicts = predict(dtrain, true);
+        List<float[]> gradients = obj.getGradient(predicts, dtrain);
+        boost(dtrain, gradients.get(0), gradients.get(1));
+    }
+    
+    /**
+     * update with give grad and hess
+     * @param dtrain training data
+     * @param grad first order of gradient
+     * @param hess seconde order of gradient
+     */
+    public void boost(DMatrix dtrain, float[] grad, float[] hess) {
+        if(grad.length != hess.length) {
+            throw new AssertionError(String.format("grad/hess length mismatch %s / %s", grad.length, hess.length));
+        }
+        XgboostJNI.XGBoosterBoostOneIter(handle, dtrain.getHandle(), grad, hess);
+    }
+    
+    /**
      * evaluate with given dmatrixs.
      * @param evalMatrixs dmatrixs for evaluation
      * @param evalNames name for eval dmatrixs, used for check results
@@ -133,15 +159,35 @@ public final class Booster {
         return evalInfo;
     }
     
+    /**
+     * evaluate with given customized Evaluation class
+     * @param evalMatrixs
+     * @param evalNames
+     * @param iter
+     * @param eval
+     * @return eval information
+     */
+    public String evalSet(DMatrix[] evalMatrixs, String[] evalNames,  int iter, IEvaluation eval) {
+        String evalInfo = "";
+        for(int i=0; i<evalNames.length; i++) {
+            String evalName = evalNames[i];
+            DMatrix evalMat = evalMatrixs[i];
+            float evalResult = eval.eval(predict(evalMat), evalMat);
+            String evalMetric = eval.getMetric();
+            evalInfo += String.format("\t%s-%s:%f", evalName,evalMetric, evalResult);
+        }
+        return evalInfo;
+    }
+    
      /**
-     * evaluate with given dmatrixs.
-     * @param dmats 
+     * evaluate with given dmatrix handles;
+     * @param dHandles evaluation data handles 
      * @param evalNames name for eval dmatrixs, used for check results
      * @param iter current eval iteration
      * @return eval information
      */
-    public String evalSet(long[] dmats, String[] evalNames,  int iter) {
-        String evalInfo = XgboostJNI.XGBoosterEvalOneIter(handle, iter, dmats, evalNames);
+    public String evalSet(long[] dHandles, String[] evalNames,  int iter) {
+        String evalInfo = XgboostJNI.XGBoosterEvalOneIter(handle, iter, dHandles, evalNames);
         return evalInfo;
     }
     
@@ -167,7 +213,7 @@ public final class Booster {
      * @param predLeaf
      * @return predict results
      */
-    private float[][] pred(DMatrix data, boolean outPutMargin, long treeLimit, boolean predLeaf) {
+    private synchronized float[][] pred(DMatrix data, boolean outPutMargin, long treeLimit, boolean predLeaf) {
         int optionMask = 0;
         if(outPutMargin) {
             optionMask = 1;

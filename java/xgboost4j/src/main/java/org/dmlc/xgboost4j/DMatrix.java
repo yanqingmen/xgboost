@@ -82,7 +82,7 @@ public class DMatrix {
      */
     public DMatrix(float[] data, int nrow, int ncol) {
         handle = XgboostJNI.XGDMatrixCreateFromMat(data, nrow, ncol, 0.0f);
-    }
+    }   
     
     /**
      * used for DMatrix slice

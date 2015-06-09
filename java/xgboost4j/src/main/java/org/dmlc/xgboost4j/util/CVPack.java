@@ -15,8 +15,10 @@
  */
 package org.dmlc.xgboost4j.util;
 
+import org.dmlc.xgboost4j.IEvaluation;
 import org.dmlc.xgboost4j.Booster;
 import org.dmlc.xgboost4j.DMatrix;
+import org.dmlc.xgboost4j.IObjective;
 
 /**
  * cross validation package for xgb
@@ -25,6 +27,7 @@ import org.dmlc.xgboost4j.DMatrix;
 public class CVPack {
     DMatrix dtrain;
     DMatrix dtest;
+    DMatrix[] dmats;
     long[] dataArray;
     String[] names;
     Booster booster;
@@ -36,7 +39,7 @@ public class CVPack {
      * @param params parameters
      */
     public CVPack(DMatrix dtrain, DMatrix dtest, Params params) {
-        DMatrix[] dmats = new DMatrix[] {dtrain, dtest};
+        dmats = new DMatrix[] {dtrain, dtest};
         booster = new Booster(params, dmats);
         dataArray = TransferUtil.dMatrixs2handles(dmats);
         names = new String[] {"train", "test"};
@@ -53,11 +56,30 @@ public class CVPack {
     }
     
     /**
+     * update one iteration
+     * @param iter iteration num
+     * @param obj customized objective
+     */
+    public void update(int iter, IObjective obj) {
+        booster.update(dtrain, iter, obj);
+    }
+    
+    /**
      * evaluation 
      * @param iter iteration num
      * @return 
      */
     public String eval(int iter) {
         return booster.evalSet(dataArray, names, iter);
+    }
+    
+    /**
+     * evaluation 
+     * @param iter iteration num
+     * @param eval customized eval
+     * @return 
+     */
+    public String eval(int iter, IEvaluation eval) {
+        return booster.evalSet(dmats, names, iter, eval);
     }
 }
