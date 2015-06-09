@@ -21,8 +21,8 @@ package org.dmlc.xgboost4j.wrapper;
  */
 public class XgboostJNI {
   public final static native long XGDMatrixCreateFromFile(String fname, int silent);
-  public final static native long XGDMatrixCreateFromCSR(long[] indptr, long[] indices, float[] data);
-  public final static native long XGDMatrixCreateFromCSC(long[] col_ptr, long[] indices, float[] data);
+  public final static native long XGDMatrixCreateFromCSR(long[] indptr, int[] indices, float[] data);
+  public final static native long XGDMatrixCreateFromCSC(long[] colptr, int[] indices, float[] data);
   public final static native long XGDMatrixCreateFromMat(float[] data, int nrow, int ncol, float missing);
   public final static native long XGDMatrixSliceDMatrix(long handle, int[] idxset);
   public final static native void XGDMatrixFree(long handle);

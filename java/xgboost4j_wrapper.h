@@ -21,7 +21,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
  * Signature: ([J[J[F)J
  */
 JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCreateFromCSR
-  (JNIEnv *, jclass, jlongArray, jlongArray, jfloatArray);
+  (JNIEnv *, jclass, jlongArray, jintArray, jfloatArray);
 
 /*
  * Class:     org_dmlc_xgboost4j_wrapper_XgboostJNI
@@ -29,7 +29,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
  * Signature: ([J[J[F)J
  */
 JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCreateFromCSC
-  (JNIEnv *, jclass, jlongArray, jlongArray, jfloatArray);
+  (JNIEnv *, jclass, jlongArray, jintArray, jfloatArray);
 
 /*
  * Class:     org_dmlc_xgboost4j_wrapper_XgboostJNI

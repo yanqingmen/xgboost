@@ -62,7 +62,7 @@ public class DMatrix {
      * @param data non zero values (sequence by row for CSR or by col for CSC)
      * @param st sparse matrix type (CSR or CSC)
      */
-    public DMatrix(long[] headers, long[] indices, float[] data, SparseType st) {
+    public DMatrix(long[] headers, int[] indices, float[] data, SparseType st) {
         if(st == SparseType.CSR) {
             handle = XgboostJNI.XGDMatrixCreateFromCSR(headers, indices, data);
         }

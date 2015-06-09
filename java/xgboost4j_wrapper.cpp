@@ -40,7 +40,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
  * Signature: ([J[J[F)J
  */
 JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCreateFromCSR
-  (JNIEnv *jenv, jclass jcls, jlongArray jindptr, jlongArray jindices, jfloatArray jdata) {
+  (JNIEnv *jenv, jclass jcls, jlongArray jindptr, jintArray jindices, jfloatArray jdata) {
     jlong jresult = 0 ;
     bst_ulong *indptr = (bst_ulong *) 0 ;
     unsigned int *indices = (unsigned int *) 0 ;
@@ -52,7 +52,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
     (void)jenv;
     (void)jcls;
     jlong* cjindptr = jenv->GetLongArrayElements(jindptr, 0);
-    jlong* cjindices = jenv->GetLongArrayElements(jindices, 0);
+    jint* cjindices = jenv->GetIntArrayElements(jindices, 0);
     jfloat* cjdata = jenv->GetFloatArrayElements(jdata, 0);
   
     indptr = (bst_ulong *)cjindptr; 
@@ -65,7 +65,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
     
     //release
     jenv->ReleaseLongArrayElements(jindptr, cjindptr, 0);
-    jenv->ReleaseLongArrayElements(jindices, cjindices, 0);
+    jenv->ReleaseIntArrayElements(jindices, cjindices, 0);
     jenv->ReleaseFloatArrayElements(jdata, cjdata, 0);
     
     return jresult;
@@ -77,7 +77,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
  * Signature: ([J[J[F)J
  */
 JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCreateFromCSC
-  (JNIEnv *jenv, jclass jcls, jlongArray jindptr, jlongArray jindices, jfloatArray jdata) {
+  (JNIEnv *jenv, jclass jcls, jlongArray jindptr, jintArray jindices, jfloatArray jdata) {
     jlong jresult = 0 ;
     bst_ulong *indptr = (bst_ulong *) 0 ;
     unsigned int *indices = (unsigned int *) 0 ;
@@ -89,7 +89,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
     (void)jenv;
     (void)jcls;
     jlong* cjindptr = jenv->GetLongArrayElements(jindptr, NULL);
-    jlong* cjindices = jenv->GetLongArrayElements(jindices, NULL);
+    jint* cjindices = jenv->GetIntArrayElements(jindices, 0);
     jfloat* cjdata = jenv->GetFloatArrayElements(jdata, NULL);
   
     indptr = (bst_ulong *)cjindptr; 
@@ -102,7 +102,7 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
     
     //release
     jenv->ReleaseLongArrayElements(jindptr, cjindptr, 0);
-    jenv->ReleaseLongArrayElements(jindices, cjindices, 0);
+    jenv->ReleaseIntArrayElements(jindices, cjindices, 0);
     jenv->ReleaseFloatArrayElements(jdata, cjdata, 0);
     
     return jresult;
