@@ -42,25 +42,16 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
 JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCreateFromCSR
   (JNIEnv *jenv, jclass jcls, jlongArray jindptr, jlongArray jindices, jfloatArray jdata) {
     jlong jresult = 0 ;
-    bst_ulong *indptr = (bst_ulong *) 0 ;
-    unsigned int *indices = (unsigned int *) 0 ;
-    float *data = (float *) 0 ;
     bst_ulong nindptr ;
     bst_ulong nelem;
     void *result = 0 ;
   
-    (void)jenv;
-    (void)jcls;
     jlong* cjindptr = jenv->GetLongArrayElements(jindptr, 0);
     jlong* cjindices = jenv->GetLongArrayElements(jindices, 0);
-    jfloat* cjdata = jenv->GetFloatArrayElements(jdata, 0);
-  
-    indptr = (bst_ulong *)cjindptr; 
-    indices = (unsigned int *)cjindices; 
-    data = (float *)cjdata; 
+    jfloat* cjdata = jenv->GetFloatArrayElements(jdata, 0); 
     nindptr = (bst_ulong)jenv->GetArrayLength(jindptr); 
     nelem = (bst_ulong)jenv->GetArrayLength(jdata); 
-    result = (void *)XGDMatrixCreateFromCSR((unsigned long const *)indptr, (unsigned int const *)indices, (float const *)data, nindptr, nelem);
+    result = (void *)XGDMatrixCreateFromCSR((unsigned long const *)cjindptr, (unsigned int const *)cjindices, (float const *)cjdata, nindptr, nelem);
     *(void **)&jresult = result; 
     
     //release
@@ -86,8 +77,6 @@ JNIEXPORT jlong JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixCrea
     bst_ulong nelem;
     void *result = 0 ;
   
-    (void)jenv;
-    (void)jcls;
     jlong* cjindptr = jenv->GetLongArrayElements(jindptr, NULL);
     jlong* cjindices = jenv->GetLongArrayElements(jindices, NULL);
     jfloat* cjdata = jenv->GetFloatArrayElements(jdata, NULL);
