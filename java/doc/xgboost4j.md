@@ -40,7 +40,7 @@ suppose a sparse matrix :
 ```java
 long[] rowHeaders = new long[] {0,2,4,7};
 float[] data = new float[] {1f,2f,4f,3f,3f,1f,2f};
-long[] colIndex = new long[] {0,2,0,3,0,1,2};
+int[] colIndex = new int[] {0,2,0,3,0,1,2};
 DMatrix dmat = new DMatrix(rowHeaders, colIndex, data, DMatrix.SparseType.CSR);
 ```
 
@@ -48,7 +48,7 @@ DMatrix dmat = new DMatrix(rowHeaders, colIndex, data, DMatrix.SparseType.CSR);
 ```java
 long[] colHeaders = new long[] {0,3,4,6,7};
 float[] data = new float[] {1f,4f,3f,1f,2f,2f,3f};
-long[] rowIndex = new long[] {0,1,2,2,0,2,1};
+int[] rowIndex = new int[] {0,1,2,2,0,2,1};
 DMatrix dmat = new DMatrix(colHeaders, rowIndex, data, DMatrix.SparseType.CSC);
 ```
 
@@ -119,7 +119,7 @@ DMatrix validMat = new DMatrix("valid.svm.txt");
 DMatrix[] evalMats = new DMatrix[] {trainMat, validMat};
 String[] evalNames = new String[] {"train", "valid"};
 int round = 2;
-Booster booster = Trainer.train(params, trainMat, round, evalMats, evalNames);
+Booster booster = Trainer.train(params, trainMat, round, evalMats, evalNames, null, null);
 ```
 
 * Saving model
