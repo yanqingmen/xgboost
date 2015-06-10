@@ -40,7 +40,7 @@ public class CustomEval implements IEvaluation {
             if(labels[i]==0f && predicts[i][0]>0.5) {
                 error++;
             }
-            else if(labels[i]==1f && predicts[i][0]<0.5) {
+            else if(labels[i]==1f && predicts[i][0]<=0.5) {
                 error++;
             }
         }

@@ -16,6 +16,7 @@
 package org.dmlc.xgboost4j.demo;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import org.dmlc.xgboost4j.Booster;
 import org.dmlc.xgboost4j.IEvaluation;
@@ -78,7 +79,6 @@ public class CustomObjective {
             
             gradients.add(grad);
             gradients.add(hess);
-            
             return gradients;
         }        
     }
@@ -111,7 +111,7 @@ public class CustomObjective {
                 if(labels[i]==0f && predicts[i][0]>0) {
                     error++;
                 }
-                else if(labels[i]==1f && predicts[i][0]<0) {
+                else if(labels[i]==1f && predicts[i][0]<=0) {
                     error++;
                 }
             }
@@ -124,17 +124,15 @@ public class CustomObjective {
         //load train mat (svmlight format)
         DMatrix trainMat = new DMatrix("../../demo/data/agaricus.txt.train");
         //load valid mat (svmlight format)
-        DMatrix validMat = new DMatrix("../../demo/data/agaricus.txt.test");
+        DMatrix testMat = new DMatrix("../../demo/data/agaricus.txt.test");
         
         //set params
         //set params
         Params param = new Params() {
             {
                 put("eta", "1.0");
-                put("max_depth", "3");
+                put("max_depth", "2");
                 put("silent", "1");
-                put("nthread", "6");
-                put("gamma", "1.0");
             }
         };
         
@@ -142,8 +140,8 @@ public class CustomObjective {
         int round = 2;
         
         //set evaluation data
-        DMatrix[] dmats = new DMatrix[] {trainMat, validMat};
-        String[] evalNames = new String[] {"train", "valid"};
+        DMatrix[] dmats = new DMatrix[] {trainMat, testMat};
+        String[] evalNames = new String[] {"train", "eval"};
         
         //user define obj and eval
         IObjective obj = new LogRegObj();
