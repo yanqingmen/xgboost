@@ -2,7 +2,7 @@ xgboost4j : java wrapper for xgboost
 ====
 
 This page will introduce xgboost4j, the java wrapper for xgboost, including:
-* [Building and Import](#building-and-import)
+* [Building](#build-xgboost4j)
 * [Data Interface](#data-interface)
 * [Setting Parameters](#setting-parameters)
 * [Train Model](#training-model)
@@ -43,19 +43,20 @@ float[] data = new float[] {1f,2f,4f,3f,3f,1f,2f};
 long[] colIndex = new long[] {0,2,0,3,0,1,2};
 DMatrix dmat = new DMatrix(rowHeaders, colIndex, data, DMatrix.SparseType.CSR);
 ```
+
   for CSC format
 ```java
 long[] colHeaders = new long[] {0,3,4,6,7};
 float[] data = new float[] {1f,4f,3f,1f,2f,2f,3f};
 long[] rowIndex = new long[] {0,1,2,2,0,2,1};
-DMatrix dmat = new DMatrix(rowHeaders, colIndex, data, DMatrix.SparseType.CSC);
+DMatrix dmat = new DMatrix(colHeaders, rowIndex, data, DMatrix.SparseType.CSC);
 ```
 
 * To load 3*2 dense matrix, the usage is like :  
 suppose a matrix :  
-1  2  
-3  4  
-5  6  
+1    2  
+3    4  
+5    6  
  
 ```java
 float[] data = new float[] {1f,2f,3f,4f,5f,6f};
@@ -81,13 +82,11 @@ import org.dmlc.xgboost4j.util.Params;
 ```java
 Params params = new Params() {
   {
-    put("eta", "0.1");
-    put("max_depth", "8");
+    put("eta", "1.0");
+    put("max_depth", "2");
     put("silent", "1");
-    put("nthread", "6");
-    put("num_class", "9");
-    put("objective", "multi:softprob");
-    put("eval_metric", "mlogloss");
+    put("objective", "binary:logistic");
+    put("eval_metric", "logloss");
   }
 };
 ```
@@ -95,14 +94,12 @@ Params params = new Params() {
 ```java
 Params params = new Params() {
   {
-    put("eta", "0.1");
-    put("max_depth", "8");
+    put("eta", "1.0");
+    put("max_depth", "2");
     put("silent", "1");
-    put("nthread", "6");
-    put("num_class", "9");
-    put("objective", "multi:softprob");
-    put("eval_metric", "mlogloss");
-    put("eval_metric", "merror");
+    put("objective", "binary:logistic");
+    put("eval_metric", "logloss");
+    put("eval_metric", "error");
   }
 };
 ```
@@ -121,7 +118,7 @@ DMatrix trainMat = new DMatrix("train.svm.txt");
 DMatrix validMat = new DMatrix("valid.svm.txt");
 DMatrix[] evalMats = new DMatrix[] {trainMat, validMat};
 String[] evalNames = new String[] {"train", "valid"};
-int round = 10;
+int round = 2;
 Booster booster = Trainer.train(params, trainMat, round, evalMats, evalNames);
 ```
 
@@ -144,14 +141,13 @@ Params param = new Params() {
   {
     put("silent", "1");
     put("nthread", "6");
-    put("num_class", "9");
   }
 };
 Booster booster = new Booster(param, "model.bin");
 ```
 
 ####Prediction
-after training and loading a model, you use it to predict other data
+after training and loading a model, you use it to predict other data, the predict results will be a two-dimension float array (nsample, nclass) ,for predict leaf, it would be (nsample, nclass*ntrees)
 ```java
 DMatrix dtest = new DMatrix("test.svm.txt");
 //predict
