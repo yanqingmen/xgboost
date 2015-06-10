@@ -33,7 +33,7 @@ import org.dmlc.xgboost4j.util.Trainer;
  * Take this in mind when you use the customization, and maybe you need write customized evaluation function
  * @author hzx
  */
-public class CustomObjectiveExample {
+public class CustomObjective {
     /**
      * loglikelihoode loss obj function
      */

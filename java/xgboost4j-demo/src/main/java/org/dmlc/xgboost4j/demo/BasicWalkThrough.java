@@ -29,7 +29,7 @@ import org.dmlc.xgboost4j.util.Trainer;
  * a simple example of java wrapper for xgboost
  * @author hzx
  */
-public class BasicWalkThroughExample {
+public class BasicWalkThrough {
     public static boolean checkPredicts(float[][] fPredicts, float[][] sPredicts) {
         if(fPredicts.length != sPredicts.length) {
             return false;

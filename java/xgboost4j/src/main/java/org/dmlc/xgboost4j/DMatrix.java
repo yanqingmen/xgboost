@@ -19,6 +19,7 @@ import java.io.IOException;
 import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.dmlc.xgboost4j.util.Initializer;
+import org.dmlc.xgboost4j.util.TransferUtil;
 import org.dmlc.xgboost4j.wrapper.XgboostJNI;
 
 /**
@@ -117,6 +118,16 @@ public class DMatrix {
      */
     public void setBaseMargin(float[] baseMargin) {
         XgboostJNI.XGDMatrixSetFloatInfo(handle, "base_margin", baseMargin);
+    }
+    
+    /**
+     * if specified, xgboost will start from this init margin
+     * can be used to specify initial prediction to boost from
+     * @param baseMargin 
+     */
+    public void setBaseMargin(float[][] baseMargin) {
+        float[] flattenMargin = TransferUtil.flatten(baseMargin);
+        setBaseMargin(flattenMargin);
     }
     
     /**

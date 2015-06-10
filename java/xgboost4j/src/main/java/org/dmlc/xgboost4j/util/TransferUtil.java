@@ -34,4 +34,22 @@ public class TransferUtil {
         }
         return handles;
     }
+    
+    /**
+     * flatten a mat to array
+     * @param mat
+     * @return 
+     */
+    public static float[] flatten(float[][] mat) {
+        int size = 0;
+        for (float[] array : mat) size += array.length;
+        float[] result = new float[size];
+        int pos = 0;
+        for (float[] ar : mat) {
+            System.arraycopy(ar, 0, result, pos, ar.length);
+            pos += ar.length;
+        }
+        
+        return result;
+    }
 }

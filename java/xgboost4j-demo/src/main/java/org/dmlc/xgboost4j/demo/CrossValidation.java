@@ -24,7 +24,7 @@ import org.dmlc.xgboost4j.util.Params;
  * an example of cross validation
  * @author hzx
  */
-public class CVExample {
+public class CrossValidation {
     public static void main(String[] args) throws IOException {
          //load train mat
         DMatrix trainMat = new DMatrix("../../demo/data/agaricus.txt.train");
