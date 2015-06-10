@@ -26,7 +26,7 @@ import org.dmlc.xgboost4j.util.Params;
 import org.dmlc.xgboost4j.util.Trainer;
 
 /**
- * a simple example of this wrapper
+ * a simple example of java wrapper for xgboost
  * @author hzx
  */
 public class BasicWalkThroughExample {
@@ -98,23 +98,20 @@ public class BasicWalkThroughExample {
         
         
         //check the two predicts
-        assert checkPredicts(predicts, predicts2) == true;
+        System.out.println(checkPredicts(predicts, predicts2));
         
+        System.out.println("start build dmatrix from csr sparse data ...");
         //build dmatrix from CSR Sparse Matrix
         DataLoader.CSRSparseData spData = DataLoader.loadSVMFile("../../demo/data/agaricus.txt.train");
         
         DMatrix trainMat2 = new DMatrix(spData.rowHeaders, spData.colIndex, spData.data, DMatrix.SparseType.CSR);
         trainMat2.setLabel(spData.labels);
-        System.out.println(trainMat2.rowNum());
         
         dmats = new DMatrix[] {trainMat2, testMat};
         Booster booster3 = Trainer.train(param, trainMat2, round, dmats, evalNames, null, null);
         float[][] predicts3 = booster3.predict(testMat2);
-         for(int i=0; i<predicts.length; i++) {
-            System.out.println(Arrays.toString(predicts[i]) + "\t" + Arrays.toString(predicts2[i]) + "\t" + Arrays.toString(predicts3[i]));
-        }
         
         //check predicts
-        assert checkPredicts(predicts, predicts3) == true;
+        System.out.println(checkPredicts(predicts, predicts3));
     }
 }

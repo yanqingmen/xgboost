@@ -42,7 +42,7 @@ public class DataLoader {
         public float[] labels;
         public float[] data;
         public long[] rowHeaders;
-        public long[] colIndex;
+        public int[] colIndex;
     }
     
     public static DenseData loadCSVFile(String filePath) throws FileNotFoundException, UnsupportedEncodingException, IOException {
@@ -91,7 +91,7 @@ public class DataLoader {
         List<Float> tlabels = new ArrayList<>();
         List<Float> tdata = new ArrayList<>();
         List<Long> theaders = new ArrayList<>();
-        List<Long> tindex = new ArrayList<>();
+        List<Integer> tindex = new ArrayList<>();
         
         File f = new File(filePath);
         FileInputStream in = new FileInputStream(f);
@@ -115,13 +115,13 @@ public class DataLoader {
                 assert tup.length == 2;
                 
                 tdata.add(Float.valueOf(tup[1]));
-                tindex.add(Long.valueOf(tup[0]));
+                tindex.add(Integer.valueOf(tup[0]));
             }
         }
         
         spData.labels = ArrayUtils.toPrimitive(tlabels.toArray(new Float[tlabels.size()]));
         spData.data = ArrayUtils.toPrimitive(tdata.toArray(new Float[tdata.size()]));
-        spData.colIndex = ArrayUtils.toPrimitive(tindex.toArray(new Long[tindex.size()]));
+        spData.colIndex = ArrayUtils.toPrimitive(tindex.toArray(new Integer[tindex.size()]));
         spData.rowHeaders = ArrayUtils.toPrimitive(theaders.toArray(new Long[theaders.size()]));
         
         return spData;
