@@ -12,13 +12,7 @@ core of this wrapper is two classes:
 ## usage:
   please refer to [xgboost4j.md](doc/xgboost4j.md) for more information.
 
-  besides, simple examples could be found in xgboost4j-demo:
-
-  * Simple Train Example: org.dmlc.xgboost4j.demo.TrainMultiClassifierExample.java
-  
-  * Simple Predict Example: org.dmlc.xgboost4j.demo.PredictExample.java
-  
-  * Cross Validation Example: org.dmlc.xgboost4j.demo.CVExample.java
+  besides, simple examples could be found in [xgboost4j-demo](xgboost4j-demo/README.md)
  
 
 ## build native library
