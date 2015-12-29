@@ -1,21 +1,41 @@
-export CC  = gcc
-export CXX = g++
+export CC  = $(if $(shell which gcc-5),gcc-5,gcc)
+export CXX = $(if $(shell which g++-5),g++-5,g++)
+
 export MPICXX = mpicxx
 export LDFLAGS= -pthread -lm
 export CFLAGS = -Wall -O3 -msse2  -Wno-unknown-pragmas -funroll-loops
 # java include path
-export JAVAINCFLAGS = -I${JAVA_HOME}/include -I${JAVA_HOME}/include/linux -I./java
+export JAVAINCFLAGS = -I${JAVA_HOME}/include -I./java
 
 ifeq ($(OS), Windows_NT)
 	export CXX = g++ -m64
 	export CC = gcc -m64
 endif
 
+UNAME= $(shell uname)
+
+ifeq ($(UNAME), Linux)
+	LDFLAGS += -lrt
+	JAVAINCFLAGS += -I${JAVA_HOME}/include/linux
+endif
+
+ifeq ($(UNAME), Darwin)
+	JAVAINCFLAGS += -I${JAVA_HOME}/include/darwin
+endif
+
 ifeq ($(no_omp),1)
 	CFLAGS += -DDISABLE_OPENMP
 else
-	CFLAGS += -fopenmp
+	#CFLAGS += -fopenmp
+	ifeq ($(omp_mac_static),1)
+		#CFLAGS += -fopenmp -Bstatic
+		CFLAGS += -static-libgcc -static-libstdc++ -L. -fopenmp
+		#LDFLAGS += -Wl,--whole-archive -lpthread -Wl --no-whole-archive
+	else
+		CFLAGS += -fopenmp
+	endif
 endif
+
 
 # by default use c++11
 ifeq ($(cxx11),1)
@@ -56,7 +76,7 @@ else
 endif
 
 # java lib
-JLIB = java/libxgboostjavawrapper.so
+JLIB = java/libxgboost4j.so
 
 # specify tensor path
 BIN = xgboost
@@ -88,8 +108,8 @@ main.o: src/xgboost_main.cpp src/utils/*.h src/*.h src/learner/*.hpp src/learner
 xgboost:  updater.o gbm.o io.o main.o $(LIBRABIT) $(LIBDMLC)
 wrapper/xgboost_wrapper.dll wrapper/libxgboostwrapper.so: wrapper/xgboost_wrapper.cpp src/utils/*.h src/*.h src/learner/*.hpp src/learner/*.h  updater.o gbm.o io.o $(LIBRABIT) $(LIBDMLC)
 
-java: java/libxgboostjavawrapper.so
-java/libxgboostjavawrapper.so: java/xgboost4j_wrapper.cpp wrapper/xgboost_wrapper.cpp src/utils/*.h src/*.h src/learner/*.hpp src/learner/*.h  updater.o gbm.o io.o $(LIBRABIT) $(LIBDMLC)
+java: java/libxgboost4j.so
+java/libxgboost4j.so: java/xgboost4j_wrapper.cpp wrapper/xgboost_wrapper.cpp src/utils/*.h src/*.h src/learner/*.hpp src/learner/*.h  updater.o gbm.o io.o $(LIBRABIT) $(LIBDMLC)
 
 # dependency on rabit
 subtree/rabit/lib/librabit.a: subtree/rabit/src/engine.cc
@@ -161,9 +181,33 @@ Rcheck:
 	make Rbuild
 	R CMD check --as-cran xgboost*.tar.gz
 
+pythonpack:
+	#for pip maintainer only
+	cd subtree/rabit;make clean;cd ..
+	rm -rf xgboost-deploy xgboost*.tar.gz
+	cp -r python-package xgboost-deploy
+	#cp *.md xgboost-deploy/
+	cp LICENSE xgboost-deploy/
+	cp Makefile xgboost-deploy/xgboost
+	cp -r wrapper xgboost-deploy/xgboost
+	cp -r subtree xgboost-deploy/xgboost
+	cp -r multi-node xgboost-deploy/xgboost
+	cp -r windows xgboost-deploy/xgboost
+	cp -r src xgboost-deploy/xgboost
+	cp python-package/setup_pip.py xgboost-deploy/setup.py
+	#make python
+
+pythonbuild:
+	make pythonpack
+	python setup.py install
+
+pythoncheck:
+	make pythonbuild
+	python -c 'import xgboost;print xgboost.core.find_lib_path()'
+
 # lint requires dmlc to be in current folder
 lint:
-	dmlc-core/scripts/lint.py xgboost $(LINT_LANG) src wrapper R-package
+	dmlc-core/scripts/lint.py xgboost $(LINT_LANG) src wrapper R-package python-package
 
 clean:
 	$(RM) -rf $(OBJ) $(BIN) $(MPIBIN) $(MPIOBJ) $(SLIB) *.o  */*.o */*/*.o *~ */*~ */*/*~

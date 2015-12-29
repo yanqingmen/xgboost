@@ -1,73 +1,86 @@
 # coding: utf-8
-"""
-xgboost: eXtreme Gradient Boosting library
-
-Version: 0.40
-Authors: Tianqi Chen, Bing Xu
-Early stopping by Zygmunt Zając
-"""
-# pylint: disable=too-many-arguments, too-many-locals, too-many-lines, invalid-name
+# pylint: disable=too-many-arguments, too-many-branches
+"""Core XGBoost Library."""
 from __future__ import absolute_import
 
 import os
-import sys
-import re
 import ctypes
-import platform
 import collections
 
 import numpy as np
 import scipy.sparse
 
-try:
-    from sklearn.base import BaseEstimator
-    from sklearn.base import RegressorMixin, ClassifierMixin
-    from sklearn.preprocessing import LabelEncoder
-    SKLEARN_INSTALLED = True
-except ImportError:
-    SKLEARN_INSTALLED = False
+from .libpath import find_lib_path
 
-class XGBoostLibraryNotFound(Exception):
-    """Error throwed by when xgboost is not found"""
-    pass
+from .compat import STRING_TYPES, PY3, DataFrame
 
 class XGBoostError(Exception):
     """Error throwed by xgboost trainer."""
     pass
 
-__all__ = ['DMatrix', 'CVPack', 'Booster', 'aggcv', 'cv', 'mknfold', 'train']
 
-if sys.version_info[0] == 3:
-    # pylint: disable=invalid-name
-    STRING_TYPES = str,
-else:
-    # pylint: disable=invalid-name
-    STRING_TYPES = basestring,
+def from_pystr_to_cstr(data):
+    """Convert a list of Python str to C pointer
 
-def load_xglib():
-    """Load the xgboost library."""
-    curr_path = os.path.dirname(os.path.abspath(os.path.expanduser(__file__)))
-    dll_path = [curr_path]
-    if os.name == 'nt':
-        if platform.architecture()[0] == '64bit':
-            dll_path.append(os.path.join(curr_path, '../windows/x64/Release/'))
+    Parameters
+    ----------
+    data : list
+        list of str
+    """
+
+    if isinstance(data, list):
+        pointers = (ctypes.c_char_p * len(data))()
+        if PY3:
+            data = [bytes(d, 'utf-8') for d in data]
         else:
-            dll_path.append(os.path.join(curr_path, '../windows/Release/'))
-    if os.name == 'nt':
-        dll_path = [os.path.join(p, 'xgboost_wrapper.dll') for p in dll_path]
+            data = [d.encode('utf-8') if isinstance(d, unicode) else d
+                    for d in data]
+        pointers[:] = data
+        return pointers
     else:
-        dll_path = [os.path.join(p, 'libxgboostwrapper.so') for p in dll_path]
-    lib_path = [p for p in dll_path if os.path.exists(p) and os.path.isfile(p)]
-    if len(dll_path) == 0:
-        raise XGBoostLibraryNotFound(
-            'cannot find find the files in the candicate path ' + str(dll_path))
+        # copy from above when we actually use it
+        raise NotImplementedError
+
+
+def from_cstr_to_pystr(data, length):
+    """Revert C pointer to Python str
+
+    Parameters
+    ----------
+    data : ctypes pointer
+        pointer to data
+    length : ctypes pointer
+        pointer to length of data
+    """
+    if PY3:
+        res = []
+        for i in range(length.value):
+            try:
+                res.append(str(data[i].decode('ascii')))
+            except UnicodeDecodeError:
+                res.append(str(data[i].decode('utf-8')))
+    else:
+        res = []
+        for i in range(length.value):
+            try:
+                res.append(str(data[i].decode('ascii')))
+            except UnicodeDecodeError:
+                res.append(unicode(data[i].decode('utf-8')))
+    return res
+
+
+def _load_lib():
+    """Load xgboost Library."""
+    lib_path = find_lib_path()
+    if len(lib_path) == 0:
+        return None
     lib = ctypes.cdll.LoadLibrary(lib_path[0])
     lib.XGBGetLastError.restype = ctypes.c_char_p
-
     return lib
 
+
 # load the XGBoost library globally
-_LIB = load_xglib()
+_LIB = _load_lib()
 
 def _check_call(ret):
     """Check the return value of C API call
@@ -116,30 +129,96 @@ def c_array(ctype, values):
     return (ctype * len(values))(*values)
 
 
+
+PANDAS_DTYPE_MAPPER = {'int8': 'int', 'int16': 'int', 'int32': 'int', 'int64': 'int',
+                       'uint8': 'int', 'uint16': 'int', 'uint32': 'int', 'uint64': 'int',
+                       'float16': 'float', 'float32': 'float', 'float64': 'float',
+                       'bool': 'i'}
+
+
+def _maybe_pandas_data(data, feature_names, feature_types):
+    """ Extract internal data from pd.DataFrame for DMatrix data """
+
+    if not isinstance(data, DataFrame):
+        return data, feature_names, feature_types
+
+    data_dtypes = data.dtypes
+    if not all(dtype.name in PANDAS_DTYPE_MAPPER for dtype in data_dtypes):
+        raise ValueError('DataFrame.dtypes for data must be int, float or bool')
+
+    if feature_names is None:
+        feature_names = data.columns.format()
+
+    if feature_types is None:
+        feature_types = [PANDAS_DTYPE_MAPPER[dtype.name] for dtype in data_dtypes]
+
+    data = data.values.astype('float')
+
+    return data, feature_names, feature_types
+
+
+def _maybe_pandas_label(label):
+    """ Extract internal data from pd.DataFrame for DMatrix label """
+
+    if isinstance(label, DataFrame):
+        if len(label.columns) > 1:
+            raise ValueError('DataFrame for label cannot have multiple columns')
+
+        label_dtypes = label.dtypes
+        if not all(dtype.name in PANDAS_DTYPE_MAPPER for dtype in label_dtypes):
+            raise ValueError('DataFrame.dtypes for label must be int, float or bool')
+        else:
+            label = label.values.astype('float')
+    # pd.Series can be passed to xgb as it is
+
+    return label
+
 class DMatrix(object):
-    """Data Matrix used in XGBoost."""
-    def __init__(self, data, label=None, missing=0.0, weight=None, silent=False):
+    """Data Matrix used in XGBoost.
+
+    DMatrix is a internal data structure that used by XGBoost
+    which is optimized for both memory efficiency and training speed.
+    You can construct DMatrix from numpy.arrays
+    """
+
+    _feature_names = None  # for previous version's pickle
+    _feature_types = None
+
+    def __init__(self, data, label=None, missing=0.0,
+                 weight=None, silent=False,
+                 feature_names=None, feature_types=None):
         """
         Data matrix used in XGBoost.
 
         Parameters
         ----------
-        data : string/numpy array/scipy.sparse
-            Data source, string type is the path of svmlight format txt file,
-            xgb buffer or path to cache_file
-        label : list or numpy 1-D array (optional)
+        data : string/numpy array/scipy.sparse/pd.DataFrame
+            Data source of DMatrix.
+            When data is string type, it represents the path libsvm format txt file,
+            or binary file that xgboost can read from.
+        label : list or numpy 1-D array, optional
             Label of the training data.
-        missing : float
+        missing : float, optional
             Value in the data which needs to be present as a missing value.
-        weight : list or numpy 1-D array (optional)
+        weight : list or numpy 1-D array , optional
             Weight for each instance.
-        silent: boolean
+        silent : boolean, optional
             Whether print messages during construction
+        feature_names : list, optional
+            Set names for features.
+        feature_types : list, optional
+            Set types for features.
         """
         # force into void_p, mac need to pass things in as void_p
         if data is None:
             self.handle = None
             return
+
+        data, feature_names, feature_types = _maybe_pandas_data(data,
+                                                                feature_names,
+                                                                feature_types)
+        label = _maybe_pandas_label(label)
+
         if isinstance(data, STRING_TYPES):
             self.handle = ctypes.c_void_p()
             _check_call(_LIB.XGDMatrixCreateFromFile(c_str(data),
@@ -149,18 +228,21 @@ class DMatrix(object):
             self._init_from_csr(data)
         elif isinstance(data, scipy.sparse.csc_matrix):
             self._init_from_csc(data)
-        elif isinstance(data, np.ndarray) and len(data.shape) == 2:
+        elif isinstance(data, np.ndarray):
             self._init_from_npy2d(data, missing)
         else:
             try:
                 csr = scipy.sparse.csr_matrix(data)
                 self._init_from_csr(csr)
             except:
-                raise TypeError('can not intialize DMatrix from {}'.format(type(data).__name__))
+                raise TypeError('can not initialize DMatrix from {}'.format(type(data).__name__))
         if label is not None:
             self.set_label(label)
         if weight is not None:
             self.set_weight(weight)
+
+        self.feature_names = feature_names
+        self.feature_types = feature_types
 
     def _init_from_csr(self, csr):
         """
@@ -192,6 +274,8 @@ class DMatrix(object):
         """
         Initialize data from a 2-D numpy matrix.
         """
+        if len(mat.shape) != 2:
+            raise ValueError('Input numpy.ndarray must be 2 dimensional')
         data = np.array(mat.reshape(mat.size), dtype=np.float32)
         self.handle = ctypes.c_void_p()
         _check_call(_LIB.XGDMatrixCreateFromMat(data.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
@@ -377,6 +461,18 @@ class DMatrix(object):
                                          ctypes.byref(ret)))
         return ret.value
 
+    def num_col(self):
+        """Get the number of columns (features) in the DMatrix.
+
+        Returns
+        -------
+        number of columns : int
+        """
+        ret = ctypes.c_uint()
+        _check_call(_LIB.XGDMatrixNumCol(self.handle,
+                                         ctypes.byref(ret)))
+        return ret.value
+
     def slice(self, rindex):
         """Slice the DMatrix and return a new DMatrix that only contains `rindex`.
 
@@ -390,7 +486,7 @@ class DMatrix(object):
         res : DMatrix
             A new DMatrix containing only selected indices.
         """
-        res = DMatrix(None)
+        res = DMatrix(None, feature_names=self.feature_names)
         res.handle = ctypes.c_void_p()
         _check_call(_LIB.XGDMatrixSliceDMatrix(self.handle,
                                                c_array(ctypes.c_int, rindex),
@@ -398,13 +494,101 @@ class DMatrix(object):
                                                ctypes.byref(res.handle)))
         return res
 
+    @property
+    def feature_names(self):
+        """Get feature names (column labels).
+
+        Returns
+        -------
+        feature_names : list or None
+        """
+        return self._feature_names
+
+    @property
+    def feature_types(self):
+        """Get feature types (column types).
+
+        Returns
+        -------
+        feature_types : list or None
+        """
+        return self._feature_types
+
+    @feature_names.setter
+    def feature_names(self, feature_names):
+        """Set feature names (column labels).
+
+        Parameters
+        ----------
+        feature_names : list or None
+            Labels for features. None will reset existing feature names
+        """
+        if feature_names is not None:
+            # validate feature name
+            if not isinstance(feature_names, list):
+                feature_names = list(feature_names)
+            if len(feature_names) != len(set(feature_names)):
+                raise ValueError('feature_names must be unique')
+            if len(feature_names) != self.num_col():
+                msg = 'feature_names must have the same length as data'
+                raise ValueError(msg)
+            # prohibit to use symbols may affect to parse. e.g. []<
+            if not all(isinstance(f, STRING_TYPES) and
+                       not any(x in f for x in set(('[', ']', '<')))
+                       for f in feature_names):
+                raise ValueError('feature_names may not contain [, ] or <')
+        else:
+            # reset feature_types also
+            self.feature_types = None
+        self._feature_names = feature_names
+
+    @feature_types.setter
+    def feature_types(self, feature_types):
+        """Set feature types (column types).
+
+        This is for displaying the results and unrelated
+        to the learning process.
+
+        Parameters
+        ----------
+        feature_types : list or None
+            Labels for features. None will reset existing feature names
+        """
+        if feature_types is not None:
+
+            if self.feature_names is None:
+                msg = 'Unable to set feature types before setting names'
+                raise ValueError(msg)
+
+            if isinstance(feature_types, STRING_TYPES):
+                # single string will be applied to all columns
+                feature_types = [feature_types] * self.num_col()
+
+            if not isinstance(feature_types, list):
+                feature_types = list(feature_types)
+            if len(feature_types) != self.num_col():
+                msg = 'feature_types must have the same length as data'
+                raise ValueError(msg)
+
+            valid = ('int', 'float', 'i', 'q')
+            if not all(isinstance(f, STRING_TYPES) and f in valid
+                       for f in feature_types):
+                raise ValueError('All feature_names must be {int, float, i, q}')
+        self._feature_types = feature_types
+
 
 class Booster(object):
-    """"A Booster of of XGBoost."""
+    """"A Booster of of XGBoost.
+
+    Booster is the model of xgboost, that contains low level routines for
+    training, prediction and evaluation.
+    """
+
+    feature_names = None
+
     def __init__(self, params=None, cache=(), model_file=None):
         # pylint: disable=invalid-name
-        """
-        Learner class.
+        """Initialize the Booster.
 
         Parameters
         ----------
@@ -418,6 +602,8 @@ class Booster(object):
         for d in cache:
             if not isinstance(d, DMatrix):
                 raise TypeError('invalid cache item: {}'.format(type(d).__name__))
+            self._validate_features(d)
+
         dmats = c_array(ctypes.c_void_p, [d.handle for d in cache])
         self.handle = ctypes.c_void_p()
         _check_call(_LIB.XGBoosterCreate(dmats, len(cache), ctypes.byref(self.handle)))
@@ -464,13 +650,22 @@ class Booster(object):
         """Copy the booster object.
 
         Returns
-        --------
-        a copied booster model
+        -------
+        booster: `Booster`
+          a copied booster model
         """
         return self.__copy__()
 
     def set_param(self, params, value=None):
-        """Set parameters into the DMatrix."""
+        """Set parameters into the Booster.
+
+        Parameters
+        ----------
+        params: dict/list/str
+           list of key,value paris, dict of key to value or simply str key
+        value: optional
+           value of the specified parameter, when params is str key
+        """
         if isinstance(params, collections.Mapping):
             params = params.items()
         elif isinstance(params, STRING_TYPES) and value is not None:
@@ -480,7 +675,7 @@ class Booster(object):
 
     def update(self, dtrain, iteration, fobj=None):
         """
-        Update (one iteration).
+        Update for one iteration, with objective function calculated internally.
 
         Parameters
         ----------
@@ -493,6 +688,8 @@ class Booster(object):
         """
         if not isinstance(dtrain, DMatrix):
             raise TypeError('invalid training matrix: {}'.format(type(dtrain).__name__))
+        self._validate_features(dtrain)
+
         if fobj is None:
             _check_call(_LIB.XGBoosterUpdateOneIter(self.handle, iteration, dtrain.handle))
         else:
@@ -502,7 +699,7 @@ class Booster(object):
 
     def boost(self, dtrain, grad, hess):
         """
-        Update.
+        Boost the booster for one iteration, with customized gradient statistics.
 
         Parameters
         ----------
@@ -517,6 +714,8 @@ class Booster(object):
             raise ValueError('grad / hess length mismatch: {} / {}'.format(len(grad), len(hess)))
         if not isinstance(dtrain, DMatrix):
             raise TypeError('invalid training matrix: {}'.format(type(dtrain).__name__))
+        self._validate_features(dtrain)
+
         _check_call(_LIB.XGBoosterBoostOneIter(self.handle, dtrain.handle,
                                                c_array(ctypes.c_float, grad),
                                                c_array(ctypes.c_float, hess),
@@ -537,7 +736,8 @@ class Booster(object):
 
         Returns
         -------
-        evaluation result
+        result: str
+            Evaluation result string.
         """
         if feval is None:
             for d in evals:
@@ -545,6 +745,8 @@ class Booster(object):
                     raise TypeError('expected DMatrix, got {}'.format(type(d[0]).__name__))
                 if not isinstance(d[1], STRING_TYPES):
                     raise TypeError('expected string, got {}'.format(type(d[1]).__name__))
+                self._validate_features(d[0])
+
             dmats = c_array(ctypes.c_void_p, [d[0].handle for d in evals])
             evnames = c_array(ctypes.c_char_p, [c_str(d[1]) for d in evals])
             msg = ctypes.c_char_p()
@@ -555,26 +757,35 @@ class Booster(object):
         else:
             res = '[%d]' % iteration
             for dmat, evname in evals:
-                name, val = feval(self.predict(dmat), dmat)
-                res += '\t%s-%s:%f' % (evname, name, val)
+                feval_ret = feval(self.predict(dmat), dmat)
+                if isinstance(feval_ret, list):
+                    for name, val in feval_ret:
+                        res += '\t%s-%s:%f' % (evname, name, val)
+                else:
+                    name, val = feval_ret
+                    res += '\t%s-%s:%f' % (evname, name, val)
             return res
 
     def eval(self, data, name='eval', iteration=0):
         """Evaluate the model on mat.
 
-
         Parameters
-        ---------
+        ----------
         data : DMatrix
             The dmatrix storing the input.
 
-        name : str (default = 'eval')
-            The name of the dataset
+        name : str, optional
+            The name of the dataset.
 
+        iteration : int, optional
+            The current iteration number.
 
-        iteration : int (default = 0)
-            The current iteration number
+        Returns
+        -------
+        result: str
+            Evaluation result string.
         """
+        self._validate_features(data)
         return self.eval_set([(data, name)], iteration)
 
     def predict(self, data, output_margin=False, ntree_limit=0, pred_leaf=False):
@@ -612,6 +823,9 @@ class Booster(object):
             option_mask |= 0x01
         if pred_leaf:
             option_mask |= 0x02
+
+        self._validate_features(data)
+
         length = ctypes.c_ulong()
         preds = ctypes.POINTER(ctypes.c_float)()
         _check_call(_LIB.XGBoosterPredict(self.handle, data.handle,
@@ -664,8 +878,11 @@ class Booster(object):
         fname : string or a memory buffer
             Input file name or memory buffer(see also save_raw)
         """
-        if isinstance(fname, str):  # assume file name
-            _LIB.XGBoosterLoadModel(self.handle, c_str(fname))
+        if isinstance(fname, STRING_TYPES):  # assume file name
+            if os.path.exists(fname):
+                _LIB.XGBoosterLoadModel(self.handle, c_str(fname))
+            else:
+                raise ValueError("No such file: {0}".format(fname))
         else:
             buf = fname
             length = ctypes.c_ulong(len(buf))
@@ -673,6 +890,7 @@ class Booster(object):
             _check_call(_LIB.XGBoosterLoadModelFromBuffer(self.handle, ptr, length))
 
     def dump_model(self, fout, fmap='', with_stats=False):
+        # pylint: disable=consider-using-enumerate
         """
         Dump model into a text file.
 
@@ -701,16 +919,36 @@ class Booster(object):
         """
         Returns the dump the model as a list of strings.
         """
+
         length = ctypes.c_ulong()
         sarr = ctypes.POINTER(ctypes.c_char_p)()
-        _check_call(_LIB.XGBoosterDumpModel(self.handle,
-                                            c_str(fmap),
-                                            int(with_stats),
-                                            ctypes.byref(length),
-                                            ctypes.byref(sarr)))
-        res = []
-        for i in range(length.value):
-            res.append(str(sarr[i].decode('ascii')))
+        if self.feature_names is not None and fmap == '':
+            flen = int(len(self.feature_names))
+
+            fname = from_pystr_to_cstr(self.feature_names)
+
+            if self.feature_types is None:
+                # use quantitative as default
+                # {'q': quantitative, 'i': indicator}
+                ftype = from_pystr_to_cstr(['q'] * flen)
+            else:
+                ftype = from_pystr_to_cstr(self.feature_types)
+            _check_call(_LIB.XGBoosterDumpModelWithFeatures(self.handle,
+                                                            flen,
+                                                            fname,
+                                                            ftype,
+                                                            int(with_stats),
+                                                            ctypes.byref(length),
+                                                            ctypes.byref(sarr)))
+        else:
+            if fmap != '' and not os.path.exists(fmap):
+                raise ValueError("No such file: {0}".format(fmap))
+            _check_call(_LIB.XGBoosterDumpModel(self.handle,
+                                                c_str(fmap),
+                                                int(with_stats),
+                                                ctypes.byref(length),
+                                                ctypes.byref(sarr)))
+        res = from_cstr_to_pystr(sarr, length)
         return res
 
     def get_fscore(self, fmap=''):
@@ -736,435 +974,18 @@ class Booster(object):
                     fmap[fid] += 1
         return fmap
 
-
-def train(params, dtrain, num_boost_round=10, evals=(), obj=None, feval=None,
-          early_stopping_rounds=None, evals_result=None):
-    # pylint: disable=too-many-statements,too-many-branches, attribute-defined-outside-init
-    """Train a booster with given parameters.
-
-    Parameters
-    ----------
-    params : dict
-        Booster params.
-    dtrain : DMatrix
-        Data to be trained.
-    num_boost_round: int
-        Number of boosting iterations.
-    watchlist (evals): list of pairs (DMatrix, string)
-        List of items to be evaluated during training, this allows user to watch
-        performance on the validation set.
-    obj : function
-        Customized objective function.
-    feval : function
-        Customized evaluation function.
-    early_stopping_rounds: int
-        Activates early stopping. Validation error needs to decrease at least
-        every <early_stopping_rounds> round(s) to continue training.
-        Requires at least one item in evals.
-        If there's more than one, will use the last.
-        Returns the model from the last iteration (not the best one).
-        If early stopping occurs, the model will have two additional fields:
-        bst.best_score and bst.best_iteration.
-    evals_result: dict
-        This dictionary stores the evaluation results of all the items in watchlist
-
-    Returns
-    -------
-    booster : a trained booster model
-    """
-
-    evals = list(evals)
-    bst = Booster(params, [dtrain] + [d[0] for d in evals])
-
-    if evals_result is not None:
-        if not isinstance(evals_result, dict):
-            raise TypeError('evals_result has to be a dictionary')
-        else:
-            evals_name = [d[1] for d in evals]
-            evals_result.clear()
-            evals_result.update({key:[] for key in evals_name})
-
-    if not early_stopping_rounds:
-        for i in range(num_boost_round):
-            bst.update(dtrain, i, obj)
-            if len(evals) != 0:
-                bst_eval_set = bst.eval_set(evals, i, feval)
-                if isinstance(bst_eval_set, STRING_TYPES):
-                    msg = bst_eval_set
-                else:
-                    msg = bst_eval_set.decode()
-
-                sys.stderr.write(msg + '\n')
-                if evals_result is not None:
-                    res = re.findall(":([0-9.]+).", msg)
-                    for key, val in zip(evals_name, res):
-                        evals_result[key].append(val)
-        return bst
-
-    else:
-        # early stopping
-        if len(evals) < 1:
-            raise ValueError('For early stopping you need at least one set in evals.')
-
-        sys.stderr.write("Will train until {} error hasn't decreased in {} rounds.\n".format(\
-                evals[-1][1], early_stopping_rounds))
-
-        # is params a list of tuples? are we using multiple eval metrics?
-        if isinstance(params, list):
-            if len(params) != len(dict(params).items()):
-                raise ValueError('Check your params.'\
-                                     'Early stopping works with single eval metric only.')
-            params = dict(params)
-
-        # either minimize loss or maximize AUC/MAP/NDCG
-        maximize_score = False
-        if 'eval_metric' in params:
-            maximize_metrics = ('auc', 'map', 'ndcg')
-            if any(params['eval_metric'].startswith(x) for x in maximize_metrics):
-                maximize_score = True
-
-        if maximize_score:
-            best_score = 0.0
-        else:
-            best_score = float('inf')
-
-        best_msg = ''
-        best_score_i = 0
-
-        for i in range(num_boost_round):
-            bst.update(dtrain, i, obj)
-            bst_eval_set = bst.eval_set(evals, i, feval)
-
-            if isinstance(bst_eval_set, STRING_TYPES):
-                msg = bst_eval_set
-            else:
-                msg = bst_eval_set.decode()
-
-            sys.stderr.write(msg + '\n')
-
-            if evals_result is not None:
-                res = re.findall(":([0-9.]+).", msg)
-                for key, val in zip(evals_name, res):
-                    evals_result[key].append(val)
-
-            score = float(msg.rsplit(':', 1)[1])
-            if (maximize_score and score > best_score) or \
-                    (not maximize_score and score < best_score):
-                best_score = score
-                best_score_i = i
-                best_msg = msg
-            elif i - best_score_i >= early_stopping_rounds:
-                sys.stderr.write("Stopping. Best iteration:\n{}\n\n".format(best_msg))
-                bst.best_score = best_score
-                bst.best_iteration = best_score_i
-                break
-        bst.best_score = best_score
-        bst.best_iteration = best_score_i
-        return bst
-
-class CVPack(object):
-    """"Auxiliary datastruct to hold one fold of CV."""
-    def __init__(self, dtrain, dtest, param):
-        """"Initialize the CVPack"""
-        self.dtrain = dtrain
-        self.dtest = dtest
-        self.watchlist = [(dtrain, 'train'), (dtest, 'test')]
-        self.bst = Booster(param, [dtrain, dtest])
-
-    def update(self, iteration, fobj):
-        """"Update the boosters for one iteration"""
-        self.bst.update(self.dtrain, iteration, fobj)
-
-    def eval(self, iteration, feval):
-        """"Evaluate the CVPack for one iteration."""
-        return self.bst.eval_set(self.watchlist, iteration, feval)
-
-
-def mknfold(dall, nfold, param, seed, evals=(), fpreproc=None):
-    """
-    Make an n-fold list of CVPack from random indices.
-    """
-    evals = list(evals)
-    np.random.seed(seed)
-    randidx = np.random.permutation(dall.num_row())
-    kstep = len(randidx) / nfold
-    idset = [randidx[(i * kstep): min(len(randidx), (i + 1) * kstep)] for i in range(nfold)]
-    ret = []
-    for k in range(nfold):
-        dtrain = dall.slice(np.concatenate([idset[i] for i in range(nfold) if k != i]))
-        dtest = dall.slice(idset[k])
-        # run preprocessing on the data set if needed
-        if fpreproc is not None:
-            dtrain, dtest, tparam = fpreproc(dtrain, dtest, param.copy())
-        else:
-            tparam = param
-        plst = list(tparam.items()) + [('eval_metric', itm) for itm in evals]
-        ret.append(CVPack(dtrain, dtest, plst))
-    return ret
-
-
-def aggcv(rlist, show_stdv=True):
-    # pylint: disable=invalid-name
-    """
-    Aggregate cross-validation results.
-    """
-    cvmap = {}
-    ret = rlist[0].split()[0]
-    for line in rlist:
-        arr = line.split()
-        assert ret == arr[0]
-        for it in arr[1:]:
-            if not isinstance(it, STRING_TYPES):
-                it = it.decode()
-            k, v = it.split(':')
-            if k not in cvmap:
-                cvmap[k] = []
-            cvmap[k].append(float(v))
-    for k, v in sorted(cvmap.items(), key=lambda x: x[0]):
-        v = np.array(v)
-        if not isinstance(ret, STRING_TYPES):
-            ret = ret.decode()
-        if show_stdv:
-            ret += '\tcv-%s:%f+%f' % (k, np.mean(v), np.std(v))
-        else:
-            ret += '\tcv-%s:%f' % (k, np.mean(v))
-    return ret
-
-
-def cv(params, dtrain, num_boost_round=10, nfold=3, metrics=(),
-       obj=None, feval=None, fpreproc=None, show_stdv=True, seed=0):
-    # pylint: disable = invalid-name
-    """Cross-validation with given paramaters.
-
-    Parameters
-    ----------
-    params : dict
-        Booster params.
-    dtrain : DMatrix
-        Data to be trained.
-    num_boost_round : int
-        Number of boosting iterations.
-    nfold : int
-        Number of folds in CV.
-    metrics : list of strings
-        Evaluation metrics to be watched in CV.
-    obj : function
-        Custom objective function.
-    feval : function
-        Custom evaluation function.
-    fpreproc : function
-        Preprocessing function that takes (dtrain, dtest, param) and returns
-        transformed versions of those.
-    show_stdv : bool
-        Whether to display the standard deviation.
-    seed : int
-        Seed used to generate the folds (passed to numpy.random.seed).
-
-    Returns
-    -------
-    evaluation history : list(string)
-    """
-    results = []
-    cvfolds = mknfold(dtrain, nfold, params, seed, metrics, fpreproc)
-    for i in range(num_boost_round):
-        for fold in cvfolds:
-            fold.update(i, obj)
-        res = aggcv([f.eval(i, feval) for f in cvfolds], show_stdv)
-        sys.stderr.write(res + '\n')
-        results.append(res)
-    return results
-
-
-# used for compatiblity without sklearn
-XGBModelBase = object
-XGBClassifierBase = object
-XGBRegressorBase = object
-if SKLEARN_INSTALLED:
-    XGBModelBase = BaseEstimator
-    XGBRegressorBase = RegressorMixin
-    XGBClassifierBase = ClassifierMixin
-
-class XGBModel(XGBModelBase):
-    # pylint: disable=too-many-arguments, too-many-instance-attributes, invalid-name
-    """Implementation of the Scikit-Learn API for XGBoost.
-
-    Parameters
-    ----------
-    max_depth : int
-        Maximum tree depth for base learners.
-    learning_rate : float
-        Boosting learning rate (xgb's "eta")
-    n_estimators : int
-        Number of boosted trees to fit.
-    silent : boolean
-        Whether to print messages while running boosting.
-    objective : string
-        Specify the learning task and the corresponding learning objective.
-
-    nthread : int
-        Number of parallel threads used to run xgboost.
-    gamma : float
-        Minimum loss reduction required to make a further partition on a leaf node of the tree.
-    min_child_weight : int
-        Minimum sum of instance weight(hessian) needed in a child.
-    max_delta_step : int
-        Maximum delta step we allow each tree's weight estimation to be.
-    subsample : float
-        Subsample ratio of the training instance.
-    colsample_bytree : float
-        Subsample ratio of columns when constructing each tree.
-
-    base_score:
-        The initial prediction score of all instances, global bias.
-    seed : int
-        Random number seed.
-    missing : float, optional
-        Value in the data which needs to be present as a missing value. If
-        None, defaults to np.nan.
-    """
-    def __init__(self, max_depth=3, learning_rate=0.1, n_estimators=100,
-                 silent=True, objective="reg:linear",
-                 nthread=-1, gamma=0, min_child_weight=1, max_delta_step=0,
-                 subsample=1, colsample_bytree=1,
-                 base_score=0.5, seed=0, missing=None):
-        if not SKLEARN_INSTALLED:
-            raise XGBoostError('sklearn needs to be installed in order to use this module')
-        self.max_depth = max_depth
-        self.learning_rate = learning_rate
-        self.n_estimators = n_estimators
-        self.silent = silent
-        self.objective = objective
-
-        self.nthread = nthread
-        self.gamma = gamma
-        self.min_child_weight = min_child_weight
-        self.max_delta_step = max_delta_step
-        self.subsample = subsample
-        self.colsample_bytree = colsample_bytree
-
-        self.base_score = base_score
-        self.seed = seed
-        self.missing = missing if missing is not None else np.nan
-        self._Booster = None
-
-    def __setstate__(self, state):
-        # backward compatiblity code
-        # load booster from raw if it is raw
-        # the booster now support pickle
-        bst = state["_Booster"]
-        if bst is not None and not isinstance(bst, Booster):
-            state["_Booster"] = Booster(model_file=bst)
-        self.__dict__.update(state)
-
-    def booster(self):
-        """Get the underlying xgboost Booster of this model.
-
-        This will raise an exception when fit was not called
-
-        Returns
-        -------
-        booster : a xgboost booster of underlying model
+    def _validate_features(self, data):
         """
-        if self._Booster is None:
-            raise XGBoostError('need to call fit beforehand')
-        return self._Booster
-
-    def get_params(self, deep=False):
-        """Get parameter.s"""
-        params = super(XGBModel, self).get_params(deep=deep)
-        if params['missing'] is np.nan:
-            params['missing'] = None  # sklearn doesn't handle nan. see #4725
-        return params
-
-    def get_xgb_params(self):
-        """Get xgboost type parameters."""
-        xgb_params = self.get_params()
-
-        xgb_params['silent'] = 1 if self.silent else 0
-
-        if self.nthread <= 0:
-            xgb_params.pop('nthread', None)
-        return xgb_params
-
-    def fit(self, data, y):
-        # pylint: disable=missing-docstring,invalid-name
-        train_dmatrix = DMatrix(data, label=y, missing=self.missing)
-        self._Booster = train(self.get_xgb_params(), train_dmatrix, self.n_estimators)
-        return self
-
-    def predict(self, data):
-        # pylint: disable=missing-docstring,invalid-name
-        test_dmatrix = DMatrix(data, missing=self.missing)
-        return self.booster().predict(test_dmatrix)
-
-
-class XGBClassifier(XGBModel, XGBClassifierBase):
-    # pylint: disable=missing-docstring,too-many-arguments,invalid-name
-    __doc__ = """
-    Implementation of the scikit-learn API for XGBoost classification
-    """ + "\n".join(XGBModel.__doc__.split('\n')[2:])
-
-    def __init__(self, max_depth=3, learning_rate=0.1,
-                 n_estimators=100, silent=True,
-                 objective="binary:logistic",
-                 nthread=-1, gamma=0, min_child_weight=1,
-                 max_delta_step=0, subsample=1, colsample_bytree=1,
-                 base_score=0.5, seed=0, missing=None):
-        super(XGBClassifier, self).__init__(max_depth, learning_rate,
-                                            n_estimators, silent, objective,
-                                            nthread, gamma, min_child_weight,
-                                            max_delta_step, subsample,
-                                            colsample_bytree,
-                                            base_score, seed, missing)
-
-    def fit(self, X, y, sample_weight=None):
-        # pylint: disable = attribute-defined-outside-init,arguments-differ
-        self.classes_ = list(np.unique(y))
-        self.n_classes_ = len(self.classes_)
-        if self.n_classes_ > 2:
-            # Switch to using a multiclass objective in the underlying XGB instance
-            self.objective = "multi:softprob"
-            xgb_options = self.get_xgb_params()
-            xgb_options['num_class'] = self.n_classes_
+        Validate Booster and data's feature_names are identical.
+        Set feature_names and feature_types from DMatrix
+        """
+        if self.feature_names is None:
+            self.feature_names = data.feature_names
+            self.feature_types = data.feature_types
         else:
-            xgb_options = self.get_xgb_params()
+            # Booster can't accept data with different feature names
+            if self.feature_names != data.feature_names:
+                msg = 'feature_names mismatch: {0} {1}'
+                raise ValueError(msg.format(self.feature_names,
+                                            data.feature_names))
 
-        self._le = LabelEncoder().fit(y)
-        training_labels = self._le.transform(y)
-
-        if sample_weight is not None:
-            train_dmatrix = DMatrix(X, label=training_labels, weight=sample_weight,
-                                    missing=self.missing)
-        else:
-            train_dmatrix = DMatrix(X, label=training_labels,
-                                    missing=self.missing)
-
-        self._Booster = train(xgb_options, train_dmatrix, self.n_estimators)
-
-        return self
-
-    def predict(self, data):
-        test_dmatrix = DMatrix(data, missing=self.missing)
-        class_probs = self.booster().predict(test_dmatrix)
-        if len(class_probs.shape) > 1:
-            column_indexes = np.argmax(class_probs, axis=1)
-        else:
-            column_indexes = np.repeat(0, data.shape[0])
-            column_indexes[class_probs > 0.5] = 1
-        return self._le.inverse_transform(column_indexes)
-
-    def predict_proba(self, data):
-        test_dmatrix = DMatrix(data, missing=self.missing)
-        class_probs = self.booster().predict(test_dmatrix)
-        if self.objective == "multi:softprob":
-            return class_probs
-        else:
-            classone_probs = class_probs
-            classzero_probs = 1.0 - classone_probs
-            return np.vstack((classzero_probs, classone_probs)).transpose()
-
-class XGBRegressor(XGBModel, XGBRegressorBase):
-    # pylint: disable=missing-docstring
-    __doc__ = """
-    Implementation of the scikit-learn API for XGBoost regression
-    """ + "\n".join(XGBModel.__doc__.split('\n')[2:])
