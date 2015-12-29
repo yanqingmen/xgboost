@@ -7,8 +7,8 @@ if [ $(uname) == "Darwin" ]; then
   omp="1"
 fi
 cd ..
-make java no_omp=${omp}
-cd java
+make jvm no_omp=${omp}
+cd jvm
 echo "move native lib"
 
 libPath="xgboost4j/src/main/resources/lib"
