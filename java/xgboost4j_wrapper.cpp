@@ -19,9 +19,8 @@
 //helper functions
 //set handle
 void setHandle(JNIEnv *jenv, jlongArray jhandle, void* handle) {
-    long out[1];
-    out[0] = (long) handle;
-    jenv->SetLongArrayRegion(jhandle, 0, 1, (const jlong*) out);
+    jlong out = (jlong) handle;
+    jenv->SetLongArrayRegion(jhandle, 0, 1, &out);
 }
 
 JNIEXPORT jstring JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGBGetLastError
@@ -271,7 +270,7 @@ JNIEXPORT jint JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGDMatrixNumRo
  */
 JNIEXPORT jint JNICALL Java_org_dmlc_xgboost4j_wrapper_XgboostJNI_XGBoosterCreate
   (JNIEnv *jenv, jclass jcls, jlongArray jhandles, jlongArray jout) {
-    DMatrixHandle* handles;
+    DMatrixHandle* handles = 0;
     bst_ulong len = 0;
     jlong* cjhandles = 0;
     BoosterHandle result;
