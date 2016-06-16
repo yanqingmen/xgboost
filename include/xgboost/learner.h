@@ -8,7 +8,7 @@
 #ifndef XGBOOST_LEARNER_H_
 #define XGBOOST_LEARNER_H_
 
-#include <rabit.h>
+#include <rabit/rabit.h>
 #include <utility>
 #include <string>
 #include <vector>
@@ -109,6 +109,32 @@ class Learner : public rabit::Serializable {
                        std::vector<float> *out_preds,
                        unsigned ntree_limit = 0,
                        bool pred_leaf = false) const = 0;
+  /*!
+   * \brief Set additional attribute to the Booster.
+   *  The property will be saved along the booster.
+   * \param key The key of the property.
+   * \param value The value of the property.
+   */
+  virtual void SetAttr(const std::string& key, const std::string& value) = 0;
+  /*!
+   * \brief Get attribute from the booster.
+   *  The property will be saved along the booster.
+   * \param key The key of the attribute.
+   * \param out The output value.
+   * \return Whether the key exists among booster's attributes.
+   */
+  virtual bool GetAttr(const std::string& key, std::string* out) const = 0;
+  /*!
+   * \brief Delete an attribute from the booster.
+   * \param key The key of the attribute.
+   * \return Whether the key was found among booster's attributes.
+   */
+  virtual bool DelAttr(const std::string& key) = 0;
+  /*!
+   * \brief Get a vector of attribute names from the booster.
+   * \return vector of attribute name strings.
+   */
+  virtual std::vector<std::string> GetAttrNames() const = 0;
   /*!
    * \return whether the model allow lazy checkpoint in rabit.
    */

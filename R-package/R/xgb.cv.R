@@ -169,11 +169,11 @@ xgb.cv <- function(params=list(), data, nrounds, nfold, label = NULL, missing = 
         num_class <- params[['num_class']]
         if (is.null(num_class))
             stop('must set num_class to use softmax')
-        predictValues <- matrix(0,xgb.numrow(dtrain),num_class)
+        predictValues <- matrix(0, nrow(dtrain), num_class)
         mat_pred <- TRUE
     }
     else
-        predictValues <- rep(0,xgb.numrow(dtrain))
+        predictValues <- rep(0, nrow(dtrain))
     history <- c()
     print.every.n <- max(as.integer(print.every.n), 1L)
     for (i in 1:nrounds) {
@@ -191,14 +191,14 @@ xgb.cv <- function(params=list(), data, nrounds, nfold, label = NULL, missing = 
 
         # early_Stopping
         if (!is.null(early.stop.round)){
-            score <- strsplit(ret,'\\s+')[[1]][2 + length(metrics)]
+            score <- strsplit(ret,'\\s+')[[1]][1 + length(metrics) + 2]
             score <- strsplit(score,'\\+|:')[[1]][[2]]
             score <- as.numeric(score)
             if ( (maximize && score > bestScore) || (!maximize && score < bestScore)) {
                 bestScore <- score
-                bestInd <- i
+                bestInd <- i - 1
             } else {
-                if (i - bestInd >= early.stop.round) {
+                if (i - bestInd > early.stop.round) {
                     earlyStopflag <- TRUE
                     cat('Stopping. Best iteration:', bestInd, '\n')
                     break
@@ -211,7 +211,7 @@ xgb.cv <- function(params=list(), data, nrounds, nfold, label = NULL, missing = 
         for (k in 1:nfold) {
             fd <- xgb_folds[[k]]
             if (!is.null(early.stop.round) && earlyStopflag) {
-              res <- xgb.iter.eval(fd$booster, fd$watchlist, bestInd - 1, feval, prediction)
+              res <- xgb.iter.eval(fd$booster, fd$watchlist, bestInd, feval, prediction)
             } else {
               res <- xgb.iter.eval(fd$booster, fd$watchlist, nrounds - 1, feval, prediction)
             }

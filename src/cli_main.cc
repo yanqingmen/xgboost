@@ -174,7 +174,6 @@ void CLITrain(const CLIParam& param) {
   }
   // initialize the learner.
   std::unique_ptr<Learner> learner(Learner::Create(cache_mats));
-  learner->Configure(param.cfg);
   int version = rabit::LoadCheckPoint(learner.get());
   if (version == 0) {
     // initializ the model if needed.
@@ -182,7 +181,9 @@ void CLITrain(const CLIParam& param) {
       std::unique_ptr<dmlc::Stream> fi(
           dmlc::Stream::Create(param.model_in.c_str(), "r"));
       learner->Load(fi.get());
+      learner->Configure(param.cfg);
     } else {
+      learner->Configure(param.cfg);
       learner->InitModel();
     }
   }
@@ -213,7 +214,9 @@ void CLITrain(const CLIParam& param) {
         LOG(CONSOLE) << res;
       }
     }
-    if (param.save_period != 0 && (i + 1) % param.save_period == 0) {
+    if (param.save_period != 0 &&
+        (i + 1) % param.save_period == 0 &&
+        rabit::GetRank() == 0) {
       std::ostringstream os;
       os << param.model_dir << '/'
          << std::setfill('0') << std::setw(4)
@@ -233,7 +236,8 @@ void CLITrain(const CLIParam& param) {
   }
   // always save final round
   if ((param.save_period == 0 || param.num_round % param.save_period != 0) &&
-      param.model_out != "NONE") {
+      param.model_out != "NONE" &&
+      rabit::GetRank() == 0) {
     std::ostringstream os;
     if (param.model_out == "NULL") {
       os << param.model_dir << '/'
@@ -267,6 +271,7 @@ void CLIDump2Text(const CLIParam& param) {
   std::unique_ptr<Learner> learner(Learner::Create({}));
   std::unique_ptr<dmlc::Stream> fi(
       dmlc::Stream::Create(param.model_in.c_str(), "r"));
+  learner->Configure(param.cfg);
   learner->Load(fi.get());
   // dump data
   std::vector<std::string> dump = learner->Dump2Text(fmap, param.dump_stats);
@@ -293,6 +298,7 @@ void CLIPredict(const CLIParam& param) {
   std::unique_ptr<Learner> learner(Learner::Create({}));
   std::unique_ptr<dmlc::Stream> fi(
       dmlc::Stream::Create(param.model_in.c_str(), "r"));
+  learner->Configure(param.cfg);
   learner->Load(fi.get());
 
   if (param.silent == 0) {
@@ -318,6 +324,7 @@ int CLIRunTask(int argc, char *argv[]) {
     printf("Usage: <config>\n");
     return 0;
   }
+  rabit::Init(argc, argv);
 
   std::vector<std::pair<std::string, std::string> > cfg;
   cfg.push_back(std::make_pair("seed", "0"));
@@ -336,7 +343,6 @@ int CLIRunTask(int argc, char *argv[]) {
   CLIParam param;
   param.Configure(cfg);
 
-  rabit::Init(argc, argv);
   switch (param.task) {
     case kTrain: CLITrain(param); break;
     case kDump2Text: CLIDump2Text(param); break;
