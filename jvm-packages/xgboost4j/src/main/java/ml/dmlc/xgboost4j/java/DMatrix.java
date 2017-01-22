@@ -92,12 +92,38 @@ public class DMatrix {
    * @param st  Type of sparsity.
    * @throws XGBoostError
    */
+  @Deprecated
   public DMatrix(long[] headers, int[] indices, float[] data, SparseType st) throws XGBoostError {
     long[] out = new long[1];
     if (st == SparseType.CSR) {
-      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSR(headers, indices, data, out));
+      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSREx(headers, indices, data, 0, out));
     } else if (st == SparseType.CSC) {
-      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSC(headers, indices, data, out));
+      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSCEx(headers, indices, data, 0, out));
+    } else {
+      throw new UnknownError("unknow sparsetype");
+    }
+    handle = out[0];
+  }
+
+  /**
+   * Create DMatrix from Sparse matrix in CSR/CSC format.
+   * @param headers The row index of the matrix.
+   * @param indices The indices of presenting entries.
+   * @param data The data content.
+   * @param st  Type of sparsity.
+   * @param shapeParam   when st is CSR, it specifies the column number, otherwise it is taken as
+   *                     row number
+   * @throws XGBoostError
+   */
+  public DMatrix(long[] headers, int[] indices, float[] data, SparseType st, int shapeParam)
+          throws XGBoostError {
+    long[] out = new long[1];
+    if (st == SparseType.CSR) {
+      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSREx(headers, indices, data,
+              shapeParam, out));
+    } else if (st == SparseType.CSC) {
+      JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromCSCEx(headers, indices, data,
+              shapeParam, out));
     } else {
       throw new UnknownError("unknow sparsetype");
     }
@@ -115,6 +141,19 @@ public class DMatrix {
   public DMatrix(float[] data, int nrow, int ncol) throws XGBoostError {
     long[] out = new long[1];
     JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromMat(data, nrow, ncol, 0.0f, out));
+    handle = out[0];
+  }
+
+  /**
+   * create DMatrix from dense matrix
+   * @param data data values
+   * @param nrow number of rows
+   * @param ncol number of columns
+   * @param missing the specified value to represent the missing value
+   */
+  public DMatrix(float[] data, int nrow, int ncol, float missing) throws XGBoostError {
+    long[] out = new long[1];
+    JNIErrorHandle.checkCall(XGBoostJNI.XGDMatrixCreateFromMat(data, nrow, ncol, missing, out));
     handle = out[0];
   }
 

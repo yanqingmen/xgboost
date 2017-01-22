@@ -27,22 +27,17 @@ xgb.DMatrix <- function(data, info = list(), missing = NA, ...) {
                     PACKAGE = "xgboost")
     cnames <- colnames(data)
   } else if (class(data) == "dgCMatrix") {
-    handle <- .Call("XGDMatrixCreateFromCSC_R", data@p, data@i, data@x,
+    handle <- .Call("XGDMatrixCreateFromCSC_R", data@p, data@i, data@x, nrow(data),
                     PACKAGE = "xgboost")
     cnames <- colnames(data)
   } else {
-    stop(paste("xgb.DMatrix: does not support to construct from ",
-               typeof(data)))
+    stop("xgb.DMatrix does not support construction from ", typeof(data))
   }
   dmat <- handle
   attributes(dmat) <- list(.Dimnames = list(NULL, cnames), class = "xgb.DMatrix")
-  #dmat <- list(handle = handle, colnames = cnames)
-  #attr(dmat, 'class') <- "xgb.DMatrix"
 
   info <- append(info, list(...))
-  if (length(info) == 0)
-    return(dmat)
-  for (i in 1:length(info)) {
+  for (i in seq_along(info)) {
     p <- info[i]
     setinfo(dmat, names(p), p[[1]])
   }
@@ -54,7 +49,7 @@ xgb.DMatrix <- function(data, info = list(), missing = NA, ...) {
 # internal helper method
 xgb.get.DMatrix <- function(data, label = NULL, missing = NA, weight = NULL) {
   inClass <- class(data)
-  if (inClass == "dgCMatrix" || inClass == "matrix") {
+  if ("dgCMatrix" %in% inClass || "matrix" %in% inClass ) {
     if (is.null(label)) {
       stop("xgboost: need label when data is a matrix")
     }
@@ -70,11 +65,10 @@ xgb.get.DMatrix <- function(data, label = NULL, missing = NA, weight = NULL) {
       dtrain <- xgb.DMatrix(data)
     } else if (inClass == "xgb.DMatrix") {
       dtrain <- data
-    } else if (inClass == "data.frame") {
-      stop("xgboost only support numerical matrix input,
-           use 'data.matrix' to transform the data.")
+    } else if ("data.frame" %in% inClass) {
+      stop("xgboost doesn't support data.frame as input. Convert it to matrix first.")
     } else {
-      stop("xgboost: Invalid input of data")
+      stop("xgboost: invalid input data")
     }
   }
   return (dtrain)
@@ -186,19 +180,19 @@ getinfo <- function(object, ...) UseMethod("getinfo")
 
 #' @rdname getinfo
 #' @export
-getinfo.xgb.DMatrix <- function(object, name) {
-  if (typeof(name) != "character") {
-    stop("getinfo: name must be character")
-  }
-  if (name != "label" && name != "weight" &&
-      name != "base_margin" && name != "nrow") {
-    stop(paste("getinfo: unknown info name", name))
+getinfo.xgb.DMatrix <- function(object, name, ...) {
+  if (typeof(name) != "character" ||
+      length(name) != 1 ||
+      !name %in% c('label', 'weight', 'base_margin', 'nrow')) {
+    stop("getinfo: name must be one of the following\n",
+         "    'label', 'weight', 'base_margin', 'nrow'")
   }
   if (name != "nrow"){
     ret <- .Call("XGDMatrixGetInfo_R", object, name, PACKAGE = "xgboost")
   } else {
     ret <- nrow(object)
   }
+  if (length(ret) == 0) return(NULL)
   return(ret)
 }
 
@@ -211,7 +205,7 @@ getinfo.xgb.DMatrix <- function(object, name) {
 #' @param name the name of the field to get
 #' @param info the specific field of information to set
 #' @param ... other parameters
-#' 
+#'
 #' @details
 #' The \code{name} field can be one of the following:
 #' 
@@ -237,7 +231,7 @@ setinfo <- function(object, ...) UseMethod("setinfo")
 
 #' @rdname setinfo
 #' @export
-setinfo.xgb.DMatrix <- function(object, name, info) {
+setinfo.xgb.DMatrix <- function(object, name, info, ...) {
   if (name == "label") {
     if (length(info) != nrow(object))
       stop("The length of labels must equal to the number of rows in the input data")
@@ -266,7 +260,7 @@ setinfo.xgb.DMatrix <- function(object, name, info) {
           PACKAGE = "xgboost")
     return(TRUE)
   }
-  stop(paste("setinfo: unknown info name", name))
+  stop("setinfo: unknown info name ", name)
   return(FALSE)
 }
 
@@ -341,6 +335,8 @@ slice.xgb.DMatrix <- function(object, idxset, ...) {
 #' 
 #' dtrain
 #' print(dtrain, verbose=TRUE)
+#' 
+#' @method print xgb.DMatrix
 #' @export
 print.xgb.DMatrix <- function(x, verbose=FALSE, ...) {
   cat('xgb.DMatrix  dim:', nrow(x), 'x', ncol(x), ' info: ')

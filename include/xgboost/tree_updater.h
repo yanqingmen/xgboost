@@ -16,6 +16,10 @@
 #include "./data.h"
 #include "./tree_model.h"
 
+#ifdef _MSC_VER
+#include <functional>
+#endif
+
 namespace xgboost {
 /*!
  * \brief interface of tree update module, that performs update of a tree.
@@ -78,7 +82,8 @@ struct TreeUpdaterReg
  * \endcode
  */
 #define XGBOOST_REGISTER_TREE_UPDATER(UniqueId, Name)                   \
-  static ::xgboost::TreeUpdaterReg& __make_ ## TreeUpdaterReg ## _ ## UniqueId ## __ = \
+  static DMLC_ATTRIBUTE_UNUSED ::xgboost::TreeUpdaterReg&               \
+  __make_ ## TreeUpdaterReg ## _ ## UniqueId ## __ =                    \
       ::dmlc::Registry< ::xgboost::TreeUpdaterReg>::Get()->__REGISTER__(Name)
 
 }  // namespace xgboost

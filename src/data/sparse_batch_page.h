@@ -23,6 +23,10 @@
 #include <thread>
 #endif
 
+#ifdef _MSC_VER
+#include <functional>
+#endif
+
 namespace xgboost {
 namespace data {
 /*!
@@ -201,7 +205,7 @@ class SparsePage::Writer {
    * \brief Push a write job to the writer.
    * This function won't block,
    * writing is done by another thread inside writer.
-   * \param page The page to be wriiten
+   * \param page The page to be written
    */
   void PushWrite(std::unique_ptr<SparsePage>&& page);
   /*!

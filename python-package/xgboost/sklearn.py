@@ -142,7 +142,7 @@ class XGBModel(XGBModelBase):
         self._Booster = None
 
     def __setstate__(self, state):
-        # backward compatiblity code
+        # backward compatibility code
         # load booster from raw if it is raw
         # the booster now support pickle
         bst = state["_Booster"]
@@ -182,7 +182,7 @@ class XGBModel(XGBModelBase):
             xgb_params.pop('nthread', None)
         return xgb_params
 
-    def fit(self, X, y, eval_set=None, eval_metric=None,
+    def fit(self, X, y, sample_weight=None, eval_set=None, eval_metric=None,
             early_stopping_rounds=None, verbose=True):
         # pylint: disable=missing-docstring,invalid-name,attribute-defined-outside-init
         """
@@ -194,6 +194,8 @@ class XGBModel(XGBModelBase):
             Feature matrix
         y : array_like
             Labels
+        sample_weight : array_like
+            instance weights
         eval_set : list, optional
             A list of (X, y) tuple pairs to use as a validation set for
             early-stopping
@@ -219,7 +221,10 @@ class XGBModel(XGBModelBase):
             If `verbose` and an evaluation set is used, writes the evaluation
             metric measured on the validation set to stderr.
         """
-        trainDmatrix = DMatrix(X, label=y, missing=self.missing)
+        if sample_weight is not None:
+            trainDmatrix = DMatrix(X, label=y, weight=sample_weight, missing=self.missing)
+        else:
+            trainDmatrix = DMatrix(X, label=y, missing=self.missing)
 
         evals_result = {}
         if eval_set is not None:
@@ -328,6 +333,20 @@ class XGBModel(XGBModelBase):
 
         return evals_result
 
+    @property
+    def feature_importances_(self):
+        """
+        Returns
+        -------
+        feature_importances_ : array of shape = [n_features]
+
+        """
+        b = self.booster()
+        fs = b.get_fscore()
+        all_features = [fs.get(f, 0.) for f in b.feature_names]
+        all_features = np.array(all_features, dtype=np.float32)
+        return all_features / all_features.sum()
+
 
 class XGBClassifier(XGBModel, XGBClassifierBase):
     # pylint: disable=missing-docstring,too-many-arguments,invalid-name
@@ -414,9 +433,15 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             else:
                 xgb_options.update({"eval_metric": eval_metric})
 
+        self._le = XGBLabelEncoder().fit(y)
+        training_labels = self._le.transform(y)
+
         if eval_set is not None:
             # TODO: use sample_weight if given?
-            evals = list(DMatrix(x[0], label=x[1], missing=self.missing) for x in eval_set)
+            evals = list(
+                DMatrix(x[0], label=self._le.transform(x[1]), missing=self.missing)
+                for x in eval_set
+            )
             nevals = len(evals)
             eval_names = ["validation_{}".format(i) for i in range(nevals)]
             evals = list(zip(evals, eval_names))
@@ -424,9 +449,6 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             evals = ()
 
         self._features_count = X.shape[1]
-
-        self._le = XGBLabelEncoder().fit(y)
-        training_labels = self._le.transform(y)
 
         if sample_weight is not None:
             train_dmatrix = DMatrix(X, label=training_labels, weight=sample_weight,
@@ -514,20 +536,6 @@ class XGBClassifier(XGBModel, XGBClassifierBase):
             raise XGBoostError('No results.')
 
         return evals_result
-
-    @property
-    def feature_importances_(self):
-        """
-        Returns
-        -------
-        feature_importances_ : array of shape = [n_features]
-
-        """
-        b = self.booster()
-        fs = b.get_fscore()
-        all_features = [fs.get(f, 0.) for f in b.feature_names]
-        all_features = np.array(all_features, dtype=np.float32)
-        return all_features / all_features.sum()
 
 
 class XGBRegressor(XGBModel, XGBRegressorBase):
